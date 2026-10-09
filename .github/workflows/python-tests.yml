@@ -22,7 +22,7 @@ jobs:
     - name: Install Architecture Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pydantic pandas openpyxl xlsxwriter requests python-dateutil
+        pip install pydantic pandas openpyxl xlsxwriter requests python-dateutil python-dotenv
 
     - name: Execute Core Test Matrices
       run: |
