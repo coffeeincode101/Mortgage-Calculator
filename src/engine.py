@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP, getcontext
+from decimal import Decimal, ROUND_HALF_UP, getcontext, ROUND_CEILING
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
@@ -22,7 +22,7 @@ class MortgageCalculations:
         days_in_year = 366 if calendar.isleap(start_date.year) else 365
 
         self.day_rate = (rate / Decimal("100")) / Decimal(str(days_in_year))
-        self.monthly_interest = raw_rate.quantize(Decimal("0.000001"))
+        self.monthly_interest = raw_rate
         # Calculate baseline payment with standard clean inputs
         self.monthly_total_payment = self.calculate_monthly_payment(balance_clean)
         logger.info(f'Initialised new calculation period using {rate}% , Term is {term} months')
@@ -40,7 +40,7 @@ class MortgageCalculations:
         common = (one + monthly_rate) ** self.term
         monthly_total_payment = (balance * (monthly_rate * common)) / (common - one)
         
-        return Decimal(str(monthly_total_payment)).quantize(self.TWOPLACES)
+        return Decimal(str(monthly_total_payment)).quantize(self.TWOPLACES, rounding=ROUND_CEILING)
 
     def monthly_drilldown(
             self, 
@@ -73,10 +73,11 @@ class MortgageCalculations:
         principal_from_payment = (monthly_payment_cast - interest_amount).quantize(self.TWOPLACES)
         total_principal_reduction = (principal_from_payment + overpayments).quantize(self.TWOPLACES)     
 
+
         # TRAP DOOR: If the principal covers it OR we're dynamically flagged as the last calendar month
         if total_principal_reduction >= balance or is_last_month:
             amt = (balance + interest_amount).quantize(self.TWOPLACES)
-            total_principal_reduction = balance.quantize(self.TWOPLACES)
+            total_principal_reduction = balance
             balance = Decimal("0.00")
             overpayments = Decimal("0.00")
             logger.info(f'Final payment process triggered. Balance cleared to zero.')

@@ -118,31 +118,21 @@ class TestMortgageEngine(unittest.TestCase):
         first_row = df.iloc[0]
         self.assertEqual(first_row['Date'], 'Jan - 2024')
 
-        # Hard Math Verification using quantized 797.28:
-        # 2. Hard Leap Year Math Verification:
-        # Base balance = 220000 - 60000 = 160000
-        # Monthly Rate (Quantized to 6 places) = 0.004083
-        # Standard Monthly Interest = 160000 * 0.004083 = 653.28
-        # Day Rate (2024 Leap Year) = (4.9 / 100) / 366 = 0.000133879...
-        # 25 Broken Days Interest = 160000 * 0.000133879... * 25 = 535.52
-        # Expected Total Interest = 653.28 + 535.52 = 1188.80
-        expected_interest = Decimal('1188.80')
+
+        expected_interest = Decimal('1188.85')
         self.assertEqual(
             first_row['Interest'], expected_interest,
             f"First month interest should be combined. Expected {expected_interest}, got {first_row['Interest']}"
         )
 
         # Verify Payment scale-up:
-        # Quantized Standard Formula Payment = 797.28
-        # First Month Payment = 797.28 + 25 days interest (535.52) = 1332.80
-        expected_total_amount = Decimal('1332.80')
+        expected_total_amount = Decimal('1332.85')
         self.assertEqual(
             first_row['Total Monthly Amount'], expected_total_amount,
             f"First payment should be scaled up. Expected {expected_total_amount}, got {first_row['Total Monthly Amount']}"
         )
 
         # Verify Principal remains untouched by the interest variation
-        # # Principal = 1332.80 - 1188.80 = 144.00
         expected_principal = Decimal('144.00')
         self.assertEqual(
             first_row['Principal'], expected_principal,

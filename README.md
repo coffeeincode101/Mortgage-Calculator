@@ -28,8 +28,8 @@ A high-precision financial tracking engine written in Python to calculate compre
 
 1. **Clone the repository and enter the directory:**
    ```bash
-   git clone https://github.com
-   cd Mortgage-Calculator
+    git clone https://github.com/coffeeincode101/Mortgage-Calculator.git
+    cd Mortgage-Calculator
    ```
 
 2. **Activate your virtual environment:**
