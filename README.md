@@ -73,7 +73,7 @@ if __name__ == '__main__':
     purchase_price = Decimal('220000')
     deposit = Decimal('60000')
     term_years = 35
-    one_off_overpayments = [(datetime(2025, 3, 1), Decimal('1000')), (datetime(2029, 3, 1), Decimal('3000'))] #When adding data make sure to use "(datetime(yyy, mm , dd), Decimal('1000'))" for each one-off payments
+    one_off_overpayments = [(datetime(2025, 3, 1), 1000), (datetime(2029, 3, 1), Decimal('3000'))] #When adding data make sure to use "(datetime(yyy, mm , dd), amount like 100)" for each one-off payments
 ```
 
 Running the script with these values processes your underlying caching data loops, runs structural contract constraint checks, and loads required keys using python-dotenv. 
