@@ -6,6 +6,7 @@ A high-precision financial tracking engine written in Python to calculate compre
 
 - **Dual-Interest First Payment:** Accurately calculates true UK banking startup costs by combining extra broken days in the completion month (e.g., intermediate completion gaps) alongside a standard full calendar month's amortised interest.
 - **Contract Boundary Enforcement:** Utilises Pydantic v2 (Strict Mode) to validate data contracts, ensuring inputs like deposits, purchase prices, and deal structures adhere strictly to realistic constraints.
+- **Dynamic Leap Year Calibration:** Automatically detects leap years using the calendar timeline. The engine toggles its internal interest engine configuration dynamically between 365 and 366 days, ensuring that daily interest fractions remain exact over multi-year calculation boundaries.
 - **Dynamic Multi-Deal Sequencing:** Progresses automatically across separate fixed-rate deals before shifting gracefully onto external variable tracker configurations.
 - **Automatic Variable Tracker Fallback:** If the total duration of your fixed rate deals is less than the overall mortgage term, the engine automatically fetches the Bank of England base rate and appends a 0.5% contractual premium to model tracker behavior for all remaining months.
 - **Flexible Capital Overpayments:** Supports custom data loops mapping both ongoing monthly overpayment changes and precise one-off capital injections.
@@ -73,7 +74,7 @@ if __name__ == '__main__':
     purchase_price = Decimal('220000')
     deposit = Decimal('60000')
     term_years = 35
-    one_off_overpayments = [(datetime(2025, 3, 1), 1000), (datetime(2029, 3, 1), Decimal('3000'))] #When adding data make sure to use "(datetime(yyy, mm , dd), amount like 100)" for each one-off payments
+    one_off_overpayments = [(datetime(2025, 3, 1), 1000), (datetime(2029, 3, 1), 3000)] #When adding data make sure to use "(datetime(yyy, mm , dd), enter amounts like 100)" for each one-off payments
 ```
 
 Running the script with these values processes your underlying caching data loops, runs structural contract constraint checks, and loads required keys using python-dotenv. 
