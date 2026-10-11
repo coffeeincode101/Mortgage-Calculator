@@ -3,6 +3,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import logging
+import calendar
 from typing import Dict, List, Any, Tuple
 
 getcontext().rounding = ROUND_HALF_UP
@@ -12,11 +13,15 @@ logger = logging.getLogger(__name__)
 class MortgageCalculations:
     TWOPLACES = Decimal("0.01")
     
-    def __init__(self, term: int, rate: Decimal, balance_remaining: Decimal):
+    def __init__(self, term: int, rate: Decimal, balance_remaining: Decimal, start_date: datetime):
         self.term = term
         balance_clean = balance_remaining.quantize(self.TWOPLACES)
         raw_rate = (rate / Decimal("100")) / Decimal("12")
-        self.day_rate = (rate / Decimal("100")) / Decimal("365")
+
+        # FIXED: Dynamically toggle between 365 and 366 based on the completion year
+        days_in_year = 366 if calendar.isleap(start_date.year) else 365
+
+        self.day_rate = (rate / Decimal("100")) / Decimal(str(days_in_year))
         self.monthly_interest = raw_rate.quantize(Decimal("0.000001"))
         # Calculate baseline payment with standard clean inputs
         self.monthly_total_payment = self.calculate_monthly_payment(balance_clean)
@@ -54,7 +59,7 @@ class MortgageCalculations:
         standard_monthly_interest = (balance * self.monthly_interest).quantize(self.TWOPLACES)
 
         if is_first_month:
-            # CORRECTED: 25 days of broken daily interest PLUS full upcoming standard month interest run
+            # 25 days of broken daily interest PLUS full upcoming standard month interest run
             extra_broken_days_interest = (balance * self.day_rate * Decimal(str(initial_days_accrued))).quantize(self.TWOPLACES)
             interest_amount = standard_monthly_interest + extra_broken_days_interest
             
@@ -141,7 +146,7 @@ def generate_schedule(
 
     for rate, deal_length in all_deals:
         months = deal_length * 12
-        calc_monthly = MortgageCalculations(months_remaining, rate, balance)
+        calc_monthly = MortgageCalculations(months_remaining, rate, balance, start_date=cur_month)
 
         for _ in range(months):
             if balance <= 0:

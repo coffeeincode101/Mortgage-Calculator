@@ -1,4 +1,5 @@
 import unittest
+import calendar
 from decimal import Decimal, ROUND_HALF_UP, getcontext
 from datetime import datetime
 from pydantic import ValidationError
@@ -7,6 +8,69 @@ from src.settings import MAX_MORTGAGE_TERM, MIN_PURCHASE_PRICE, DEFAULT_VARIABLE
 from src.contract_checker import MortgageDataChecker
 from src.engine import MortgageCalculations, generate_schedule, calculate_initial_gap_days
 getcontext().rounding = ROUND_HALF_UP
+
+
+class TestMortgageLeapYearLogic(unittest.TestCase):
+
+    def setUp(self):
+        """Set up boilerplate baseline parameters for class instantiations."""
+        self.term_months = 360
+        self.rate = Decimal('4.5')  # 4.5% interest rate
+        self.balance = Decimal('150000')
+
+    def test_day_rate_divisor_for_regular_year(self):
+        """Verify that a non-leap year (2023) correctly utilizes a 365-day engine divisor."""
+        regular_date = datetime(2023, 6, 15)
+        
+        # Ensure the calendar utility confirms it is a normal year
+        self.assertFalse(calendar.isleap(regular_date.year))
+
+        calc_regular = MortgageCalculations(
+            term=self.term_months,
+            rate=self.rate,
+            balance_remaining=self.balance,
+            start_date=regular_date
+        )
+
+        # Expected Math: (4.5 / 100) / 365 = 0.045 / 365
+        expected_regular_rate = (self.rate / Decimal('100')) / Decimal('365')
+        
+        self.assertEqual(
+            calc_regular.day_rate, 
+            expected_regular_rate,
+            f"Regular year daily rate mismatch. Expected division by 365, got raw day rate: {calc_regular.day_rate}"
+        )
+
+    def test_day_rate_divisor_for_leap_year(self):
+        """Verify that a leap year (2024) dynamically switches to a 366-day engine divisor."""
+        leap_date = datetime(2024, 2, 20)
+        
+        # Ensure the calendar utility confirms it is a leap year
+        self.assertTrue(calendar.isleap(leap_date.year))
+
+        calc_leap = MortgageCalculations(
+            term=self.term_months,
+            rate=self.rate,
+            balance_remaining=self.balance,
+            start_date=leap_date
+        )
+
+        # Expected Math: (4.5 / 100) / 366 = 0.045 / 366
+        expected_leap_rate = (self.rate / Decimal('100')) / Decimal('366')
+        
+        self.assertEqual(
+            calc_leap.day_rate, 
+            expected_leap_rate,
+            f"Leap year daily rate mismatch. Expected division by 366, got raw day rate: {calc_leap.day_rate}"
+        )
+        
+        # Verify the leap day rate is lower than the regular day rate due to the higher denominator
+        expected_regular_rate = (self.rate / Decimal('100')) / Decimal('365')
+        self.assertLess(
+            calc_leap.day_rate, 
+            expected_regular_rate,
+            "Leap year daily rate should be strictly lower than standard year daily rate due to 366 days division."
+        )
 
 class TestMortgageEngine(unittest.TestCase):
 
@@ -55,13 +119,14 @@ class TestMortgageEngine(unittest.TestCase):
         self.assertEqual(first_row['Date'], 'Jan - 2024')
 
         # Hard Math Verification using quantized 797.28:
+        # 2. Hard Leap Year Math Verification:
         # Base balance = 220000 - 60000 = 160000
         # Monthly Rate (Quantized to 6 places) = 0.004083
         # Standard Monthly Interest = 160000 * 0.004083 = 653.28
-        # Day Rate = (4.9 / 100) / 365 = 0.0001342465...
-        # 25 Broken Days Interest = 160000 * 0.0001342465... * 25 = 536.99
-        # Expected Total Interest = 653.28 + 536.99 = 1190.27
-        expected_interest = Decimal('1190.27')
+        # Day Rate (2024 Leap Year) = (4.9 / 100) / 366 = 0.000133879...
+        # 25 Broken Days Interest = 160000 * 0.000133879... * 25 = 535.52
+        # Expected Total Interest = 653.28 + 535.52 = 1188.80
+        expected_interest = Decimal('1188.80')
         self.assertEqual(
             first_row['Interest'], expected_interest,
             f"First month interest should be combined. Expected {expected_interest}, got {first_row['Interest']}"
@@ -69,15 +134,15 @@ class TestMortgageEngine(unittest.TestCase):
 
         # Verify Payment scale-up:
         # Quantized Standard Formula Payment = 797.28
-        # First Month Payment = 797.28 + 25 days interest (536.99) = 1334.27
-        expected_total_amount = Decimal('1334.27')
+        # First Month Payment = 797.28 + 25 days interest (535.52) = 1332.80
+        expected_total_amount = Decimal('1332.80')
         self.assertEqual(
             first_row['Total Monthly Amount'], expected_total_amount,
             f"First payment should be scaled up. Expected {expected_total_amount}, got {first_row['Total Monthly Amount']}"
         )
 
         # Verify Principal remains untouched by the interest variation
-        # Principal = 1334.27 - 1190.27 = 144.00
+        # # Principal = 1332.80 - 1188.80 = 144.00
         expected_principal = Decimal('144.00')
         self.assertEqual(
             first_row['Principal'], expected_principal,
@@ -168,7 +233,7 @@ class TestMortgageContract(unittest.TestCase):
 
 class TestMortgageMath(unittest.TestCase):
     def setUp(self):
-        self.calc = MortgageCalculations(term=12, rate=Decimal('12'), balance_remaining= Decimal('1000.00'))
+        self.calc = MortgageCalculations(term=12, rate=Decimal('12'), balance_remaining= Decimal('1000.00'), start_date=datetime(2023, 12, 7))
     
     def test_monthly_interest(self):
         # Test example has a monthly interest of 1% (12% / 12 months = 1% interest a month). 1% of 1000 is 10
@@ -182,11 +247,12 @@ class TestMortgageMath(unittest.TestCase):
         final_month_calc = MortgageCalculations(
             term=1, 
             rate=Decimal('5.0'), 
-            balance_remaining=small_balance
+            balance_remaining=small_balance,
+            start_date=datetime(2023, 12, 7)  
         )
         
         # 2. FIX: Call monthly_drilldown on the *final_month_calc* instance we just made!
-        result = final_month_calc.monthly_drilldown(overpayments=Decimal('0'), balance=small_balance, )
+        result = final_month_calc.monthly_drilldown(overpayments=Decimal('0'), balance=small_balance,)
         
         # 3. Assertions
         self.assertEqual(result['Balance'], Decimal('0.00'))
