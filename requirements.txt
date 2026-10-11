@@ -1,0 +1,7 @@
+pandas
+python-dateutil
+openpyxl
+python-dotenv
+requests
+xlsxwriter
+pydantic

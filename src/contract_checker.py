@@ -1,15 +1,15 @@
 from decimal import Decimal
 from typing import Tuple, List
 from datetime import datetime
-from src.settings import MAX_MORTGAGE_TERM, MIN_PURCHASE_PRICE, DEFAULT_VARIABLE_ADD_ON, DEFAULT_CURRENCY_SYMBOL
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from src.settings import MAX_MORTGAGE_TERM, MIN_PURCHASE_PRICE
+from pydantic import BaseModel, Field, model_validator, ConfigDict, field_validator
 
 class MortgageDataChecker(BaseModel):
-    model_config ={
-        'strict' : True,
+    model_config = {
+        'strict': True,
         'extra': 'forbid',
-        'frozen':True
-        }
+        'frozen': True
+    }
 
     start_date: datetime
     purchase_price: Decimal = Field(gt=MIN_PURCHASE_PRICE)
@@ -17,17 +17,27 @@ class MortgageDataChecker(BaseModel):
     term_years: int = Field(le=MAX_MORTGAGE_TERM)
     fixed_deals: list[Tuple[Decimal, int]]
     variable_tracker: Decimal
-    overpayments:List[Tuple[datetime, Decimal]]
-    one_off_overpayments: List[Tuple[datetime, Decimal]]
+    overpayments: List[Tuple[datetime, Decimal]]
+    one_off_overpayments: List[Tuple[datetime, Decimal]] = Field(default_factory=list)
+
+    @field_validator("one_off_overpayments", "overpayments", "fixed_deals", mode="before")
+    @classmethod
+    def handle_empty_and_malformed(cls, v):
+        # 1. Handle if the entire field is None or empty structure
+        if not v:
+            return []
+        
+        # 2. Filter out any internal empty items (like [] or ()) that break strict unpacking
+        if isinstance(v, list):
+            return [item for item in v if item]
+            
+        return v
 
     @model_validator(mode='after')
     def enforce_contracts(self) -> 'MortgageDataChecker':
-        #Checks deposit is not greater than  or equal to the propert price
-
-        if self.deposit>=self.purchase_price:
+        if self.deposit >= self.purchase_price:
             raise ValueError('Deposit contract violated: Deposit must be strictly less than the purchase price.')
 
-        #Checks that the deal length is not greater than the term of the mortgage
         fixed_deal_months = sum([deal_length * 12 for _, deal_length in self.fixed_deals])
         total_term_months = self.term_years * 12
 
@@ -38,6 +48,3 @@ class MortgageDataChecker(BaseModel):
             raise ValueError('Ledger contract violated: Overpayment amounts cannot be negative.')
 
         return self
-
-
-

@@ -1,0 +1,17 @@
+{
+    "Successful": [
+        {
+            "Rate": 3.75,
+            "Date accessed": "28-04-2026"
+        },
+        {
+            "Rate": 3.75,
+            "Date accessed": "02-05-2026"
+        },
+        {
+            "Rate": 3.75,
+            "Date accessed": "09-10-2026"
+        }
+    ],
+    "Failed": []
+}

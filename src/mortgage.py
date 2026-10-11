@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional
 from pydantic import ValidationError
 
 from utils import get_output_path, time_it
-from settings import setup_logging, MAX_MORTGAGE_TERM, MIN_PURCHASE_PRICE, DEFAULT_VARIABLE_ADD_ON, DEFAULT_CURRENCY_SYMBOL
+from settings import setup_logging, DEFAULT_VARIABLE_ADD_ON, DEFAULT_CURRENCY_SYMBOL
 from engine import generate_schedule
 from boe_scraper import setup as fetch_boe_base_rate
 from contract_checker import MortgageDataChecker
@@ -24,10 +24,12 @@ def validate_inputs(
     fixed_deals: List[Tuple[Decimal, int]],
     variable_tracker: Decimal,
     overpayments: List[Tuple[datetime, Decimal]],
-    one_off_overpayments: List[Tuple[datetime, int]]) -> Optional[pd.DataFrame]:
+    one_off_overpayments: List[Tuple[datetime, float]]) -> Optional[pd.DataFrame]:
     '''Validated user inputs against business logic, to ensure a clean output'''
+   
     fixed_deal_lengths = sum([deal_length for _, deal_length in fixed_deals])
     total_term_months = term_years * 12
+   
     try:
         # Enforce contract rules strictly using the arguments passed into this function
         # Since one_off_overpayments has an int inside the type hint, we map it safely.
@@ -39,10 +41,10 @@ def validate_inputs(
             fixed_deals=fixed_deals,
             variable_tracker=variable_tracker,
             overpayments=overpayments,
-            one_off_overpayments=[(dt, Decimal(str(amt))) for dt, amt in one_off_overpayments]
+            one_off_overpayments=[(dt, Decimal(amt).quantize(Decimal('0.01'))) for dt, amt in one_off_overpayments]
         )
     except ValidationError as error:
-        logger.error(f"Contract structural breach detected:\n{error}")
+        logger.error(f"Contract structural breach detected:\n{error}. ")
         return None
     except ValueError as error:
         logger.error(f"Contract business rule breach detected: {error}")
@@ -53,8 +55,8 @@ def validate_inputs(
 
 def save_to_excel(df: pd.DataFrame) -> None:
     '''Function saves output to Excel file in currency format and allows '''
-    output_dir = get_output_path()
     
+    output_dir = get_output_path()
     timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
     filename = f'{timestamp} - amortise schedule.xlsx'
     full_path = output_dir / filename    
@@ -62,7 +64,6 @@ def save_to_excel(df: pd.DataFrame) -> None:
 
     with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Mortgage Schedule')
-
         workbook  = writer.book
         worksheet = writer.sheets['Mortgage Schedule']
         money_format = workbook.add_format({'num_format':'£#,##0.00'})
@@ -88,17 +89,15 @@ if __name__ == '__main__':
 
     # Get external rate data
     get_boe_rate = Decimal(str(fetch_boe_base_rate())) + DEFAULT_VARIABLE_ADD_ON
-
-    one_off_overpayments = [(datetime(2024, 3, 2), 1000)]
-
-    
+    one_off_overpayments = [] #When add data make sure to use "(datetime(yyy, mm , dd), 1000)" for each one-off payments
+     
     df = validate_inputs(
         purchase_price=purchase_price,
         deposit=deposit,
         term_years=term_years,
         start_date=start_date,
         fixed_deals=my_deals,
-        variable_tracker=get_boe_rate,  # Must match 'variable_tracker' in the function definition
+        variable_tracker=get_boe_rate,  
         overpayments=monthly_overpayments,
         one_off_overpayments=one_off_overpayments,
     )
