@@ -86,10 +86,11 @@ if __name__ == '__main__':
     purchase_price = Decimal('220000')
     deposit = Decimal('60000')
     term_years = 35
+    one_off_overpayments = [] #When add data make sure to use "(datetime(yyy, mm , dd), 1000)" for each one-off payments
 
     # Get external rate data
     get_boe_rate = Decimal(str(fetch_boe_base_rate())) + DEFAULT_VARIABLE_ADD_ON
-    one_off_overpayments = [] #When add data make sure to use "(datetime(yyy, mm , dd), 1000)" for each one-off payments
+    
      
     df = validate_inputs(
         purchase_price=purchase_price,
