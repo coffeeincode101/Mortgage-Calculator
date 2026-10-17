@@ -6,10 +6,11 @@ from decimal import Decimal, ROUND_HALF_UP, getcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-
+import pandas as pd
 import requests
 from pydantic import ValidationError
 
+from src.mortgage import save_to_excel, validate_inputs
 from src.boe_scraper import load_db, save_db, setup
 from src.contract_checker import MortgageDataChecker
 from src.engine import (
@@ -881,6 +882,81 @@ class TestBoEFile(unittest.TestCase):
 
             # Verify the failure history was passed to persistence.
             mock_save.assert_called_once()
+
+
+class TestMortgageIntegration(unittest.TestCase):
+    """Test mortgage validation, calculation and Excel export."""
+
+    def test_complete_mortgage_workflow(self):
+        """Verify a valid mortgage produces a readable Excel schedule."""
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            # Arrange: Supply valid mortgage parameters.
+            mortgage_inputs = {
+                'purchase_price': Decimal('250000.00'),
+                'deposit': Decimal('50000.00'),
+                'term_years': 2,
+                'start_date': datetime(2024, 1, 10),
+                'fixed_deals': [(Decimal('4.5'), 2)],
+                'variable_tracker': None,
+                'overpayments': [],
+                'one_off_overpayments': [],
+            }
+
+            # Act: Validate and calculate the mortgage schedule.
+            schedule = validate_inputs(**mortgage_inputs)
+
+            # Verify validation and calculations succeeded.
+            self.assertIsNotNone(schedule)
+            self.assertEqual(len(schedule), 24)
+
+            # Redirect Excel output to an isolated directory.
+            with patch(
+                'src.mortgage.get_output_path',
+                return_value=output_dir
+            ):
+                save_to_excel(schedule)
+
+            # Verify exactly one Excel workbook was created.
+            excel_files = list(output_dir.glob('*.xlsx'))
+
+            self.assertEqual(len(excel_files), 1)
+
+            # Read the generated Excel workbook.
+            saved_schedule = pd.read_excel(
+                excel_files[0],
+                sheet_name='Mortgage Schedule'
+            )
+
+            # Verify the workbook contains all 24 payments.
+            self.assertEqual(len(saved_schedule), 24)
+
+            # Verify the first scheduled payment date.
+            self.assertEqual(
+                saved_schedule.iloc[0]['Date'],
+                'Feb - 2024'
+            )
+
+            # Verify the final mortgage balance is zero.
+            self.assertAlmostEqual(
+                float(saved_schedule.iloc[-1]['Balance']),
+                0.0,
+                places=2
+            )
+
+            # Verify the saved schedule matches the calculated one.
+            self.assertEqual(
+                len(saved_schedule),
+                len(schedule)
+            )
+
+            # Verify the original mortgage balance was £200,000.
+            self.assertEqual(
+                sum(schedule['Principal']),
+                Decimal('200000.00')
+            )
 
 
 if __name__== '__main__':

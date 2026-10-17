@@ -274,6 +274,23 @@ The tests cover:
 
 When calculation conventions or constructor parameters change, update the relevant tests to verify the intended behaviour rather than merely changing expected figures to match the output.
 
+### End-to-End Integration Testing
+
+The automated test suite includes an integration test that verifies the complete mortgage calculation and Excel export workflow.
+
+The test:
+
+- Validates mortgage inputs using the Pydantic contract.
+- Generates a complete 24-month amortisation schedule.
+- Exports the calculated schedule to an Excel workbook.
+- Reopens the generated workbook using pandas.
+- Verifies the repayment records and final mortgage balance.
+- Confirms that the total principal repaid matches the original loan balance.
+
+Excel output is redirected to a temporary directory during testing, ensuring that existing mortgage forecasts are not modified.
+
+The integration test uses explicitly supplied interest rates and does not require a live Bank of England connection.
+
 ### Continuous Integration
 
 GitHub Actions automatically executes the regression test suite across five Python versions:
