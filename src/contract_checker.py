@@ -36,7 +36,7 @@ class MortgageDataChecker(BaseModel):
             
         return v
 
-    @field_validator("fixed_deals", mode="after")
+    @field_validator('fixed_deals', mode='after')
     @classmethod
     def validate_fixed_deal_durations(cls, deals):
         """Reject fixed-rate deals with non-positive durations."""
