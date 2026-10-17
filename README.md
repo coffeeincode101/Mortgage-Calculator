@@ -31,7 +31,7 @@ Mortgage-Calculator/
 │   └── mortgage_testing.py  # Unit and regression tests
 ├── data/
 │   └── boe_rate.json        # Cached successful and failed rate retrievals
-├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
@@ -54,7 +54,7 @@ If neither live data nor a historical successful rate is available, the applicat
 
 ## Prerequisites and Installation
 
-Use a supported version of Python 3 and install the dependencies listed in `requirements.txt`.
+Python 3.11–3.15 is supported and tested through GitHub Actions. Project dependencies and compatible version constraints are managed centrally in [pyproject.toml](pyproject.toml).
 
 **1. Clone the repository**
 
@@ -73,7 +73,8 @@ source .venv/bin/activate
 **3. Install dependencies**
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install --group runtime
 ```
 
 **4. Environment configuration**
