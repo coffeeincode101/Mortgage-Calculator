@@ -103,7 +103,7 @@ Do not commit `.env` files containing local paths or secrets.
 From the project root, run:
 
 ```bash
-python src/mortgage.py
+python -m src.mortgage
 ```
 
 ### Example Input

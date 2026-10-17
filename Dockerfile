@@ -9,8 +9,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-ENV PYTHONPATH=/app:/app/src
-
 # Install dependencies before copying the application.
 # This allows Docker to reuse the dependency layer.
 COPY pyproject.toml ./
@@ -29,4 +27,4 @@ RUN mkdir -p /app/data /app/output && \
 USER mortgage
 
 # Run the application.
-CMD ["python", "src/mortgage.py"]
+CMD ["python", "-m", "src.mortgage"]

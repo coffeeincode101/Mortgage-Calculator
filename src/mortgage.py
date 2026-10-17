@@ -6,11 +6,15 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 from pydantic import ValidationError
 
-from utils import get_output_path, time_it
-from settings import setup_logging, DEFAULT_VARIABLE_ADD_ON, DEFAULT_CURRENCY_SYMBOL
-from engine import generate_schedule
-from boe_scraper import setup as fetch_boe_base_rate
-from contract_checker import MortgageDataChecker
+from src.utils import get_output_path, time_it
+from src.settings import (
+    setup_logging,
+    DEFAULT_VARIABLE_ADD_ON,
+    DEFAULT_CURRENCY_SYMBOL,
+    )
+from src.engine import generate_schedule
+from src.boe_scraper import setup as fetch_boe_base_rate
+from src.contract_checker import MortgageDataChecker
 
 setup_logging()
 logger = logging.getLogger(__name__)
