@@ -14,6 +14,7 @@ Calculations use Python's `Decimal` type to avoid binary floating-point rounding
 - **Bank of England–linked tracker modelling:** When fixed-rate periods do not cover the full term, the application can use a retrieved Bank Rate plus the configured tracker margin (0.5 percentage points in the supplied configuration) for the remaining period. This is a modelling assumption, not a forecast of future Bank Rate changes.
 - **Flexible overpayments:** Supports changes to ongoing monthly overpayments and individual one-off payments. Early settlement caps applied overpayments to the principal still outstanding.
 - **Excel export:** Produces a formatted `.xlsx` repayment schedule with monthly payments, principal, interest, overpayments and remaining balance.
+- **Python Compatibility:** The mortgage calculator targets Python 3.11 through 3.15. A GitHub Actions continuous integration workflow runs the regression test suite against each supported Python version on pushes and pull requests to main.
 
 ## Project Architecture
 
