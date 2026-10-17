@@ -140,7 +140,7 @@ def save_db(file_path: Path, db: dict):
     # from corruption if the application crashes during writing.
     temp_path = file_path.with_suffix('.tmp')
 
-    with open(file_path, 'w') as f:
+    with open(temp_path, 'w', encoding='utf-8') as f:
         json.dump(db, f, indent=4)
 
     os.replace(temp_path, file_path)
