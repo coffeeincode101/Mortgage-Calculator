@@ -54,8 +54,7 @@ cover/
 *.xlsx
 __pycache__/
 .pytest_cache/
-.DS_Store
-**/.DS_Store
+
 # Translations
 *.mo
 *.pot
@@ -222,3 +221,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.DS_Store
