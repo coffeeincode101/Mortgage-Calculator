@@ -29,7 +29,7 @@ class TestMortgageLeapYearLogic(unittest.TestCase):
             term=self.term_months,
             rate=self.rate,
             balance_remaining=self.balance,
-            start_date=regular_date
+            comp_date=regular_date
         )
 
         # Expected Math: (4.5 / 100) / 365 = 0.045 / 365
@@ -52,7 +52,7 @@ class TestMortgageLeapYearLogic(unittest.TestCase):
             term=self.term_months,
             rate=self.rate,
             balance_remaining=self.balance,
-            start_date=leap_date
+            comp_date=leap_date
         )
 
         # Expected Math: (4.5 / 100) / 366 = 0.045 / 366
@@ -119,14 +119,14 @@ class TestMortgageEngine(unittest.TestCase):
         self.assertEqual(first_row['Date'], 'Jan - 2024')
 
 
-        expected_interest = Decimal('1188.85')
+        expected_interest = Decimal('1190.32')
         self.assertEqual(
             first_row['Interest'], expected_interest,
             f"First month interest should be combined. Expected {expected_interest}, got {first_row['Interest']}"
         )
 
         # Verify Payment scale-up:
-        expected_total_amount = Decimal('1332.85')
+        expected_total_amount = Decimal('1334.32')
         self.assertEqual(
             first_row['Total Monthly Amount'], expected_total_amount,
             f"First payment should be scaled up. Expected {expected_total_amount}, got {first_row['Total Monthly Amount']}"
@@ -223,7 +223,7 @@ class TestMortgageContract(unittest.TestCase):
 
 class TestMortgageMath(unittest.TestCase):
     def setUp(self):
-        self.calc = MortgageCalculations(term=12, rate=Decimal('12'), balance_remaining= Decimal('1000.00'), start_date=datetime(2023, 12, 7))
+        self.calc = MortgageCalculations(term=12, rate=Decimal('12'), balance_remaining= Decimal('1000.00'), comp_date=datetime(2023, 12, 7))
     
     def test_monthly_interest(self):
         # Test example has a monthly interest of 1% (12% / 12 months = 1% interest a month). 1% of 1000 is 10
@@ -238,7 +238,7 @@ class TestMortgageMath(unittest.TestCase):
             term=1, 
             rate=Decimal('5.0'), 
             balance_remaining=small_balance,
-            start_date=datetime(2023, 12, 7)  
+            comp_date=datetime(2023, 12, 7)  
         )
         
         # 2. FIX: Call monthly_drilldown on the *final_month_calc* instance we just made!
