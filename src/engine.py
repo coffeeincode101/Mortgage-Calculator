@@ -264,8 +264,13 @@ def generate_schedule(
 
     if fixed_deal_lengths < term_years:
         variable_months = int((term_years - fixed_deal_lengths))
-        if variable_tracker:
-            all_deals.append((variable_tracker, variable_months))
+        if variable_tracker is None:
+            raise ValueError(
+                'Variable tracker rate is required when fixed-rate'
+                'deals do not cover the full mortgage term.'
+            )
+        
+        all_deals.append((variable_tracker, variable_months))
 
     for rate, deal_length in all_deals:
         months = deal_length * 12

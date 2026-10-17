@@ -108,6 +108,58 @@ class RunMortgageSchedule(unittest.TestCase):
             self.term_months,
         )
 
+    def test_zero_variable_tracker(self):
+        """Verify a 0% variable rate is processed correctly."""
+
+        schedule = generate_schedule(
+            purchase_price=self.purchase_price,
+            deposit=self.deposit,
+            term_years=2,
+            start_date=self.start_date,
+            fixed_deals=[(self.interest_rate, 1)],
+            variable_tracker=Decimal("0.00"),
+            overpayments=[],
+            one_off_overpayments=[],
+            fixed_deal_lengths=1,
+            months_remaining=24
+        )
+
+        # Verify the entire mortgage schedule is generated.
+        self.assertEqual(len(schedule), 24)
+
+        # Verify the variable-rate period charges no interest.
+        self.assertTrue(
+            all(
+                interest == Decimal("0.00")
+                for interest in schedule.iloc[12:]["Interest"]
+            )
+        )
+
+        # Verify the mortgage is fully repaid.
+        self.assertEqual(
+            schedule.iloc[-1]["Balance"],
+            Decimal("0.00")
+        )
+
+    def test_missing_variable_tracker(self):
+        """Verify missing required tracker rates raise ValueError."""
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Variable tracker rate is required"
+        ):
+            generate_schedule(
+                purchase_price=self.purchase_price,
+                deposit=self.deposit,
+                term_years=2,
+                start_date=self.start_date,
+                fixed_deals=[(self.interest_rate, 1)],
+                variable_tracker=None,
+                overpayments=[],
+                one_off_overpayments=[],
+                fixed_deal_lengths=1,
+                months_remaining=24
+            )
 class TestMortgageLeapYearLogic(unittest.TestCase):
 
     def setUp(self):
