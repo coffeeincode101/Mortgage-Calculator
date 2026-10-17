@@ -11,6 +11,11 @@ MIN_PURCHASE_PRICE = 0
 DEFAULT_VARIABLE_ADD_ON = Decimal("0.5") 
 DEFAULT_CURRENCY_SYMBOL = '£'
 
+# BoE variables
+URL = 'https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp'
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 load_dotenv()
 

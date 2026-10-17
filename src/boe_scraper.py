@@ -10,18 +10,16 @@ import json
 import logging
 from utils import time_it
 
-# Grab a logger specific to this file
+from settings import URL, HEADERS
+
+# Create a modular logger tied to this module's namespace path.
+# Child logger sends message to the root logger, initialised in mortgage.py
 logger = logging.getLogger(__name__)
-
-URL = 'https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp'
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-}
-
 
 def get_default_dates() -> Tuple[str, str]:
     
-    '''Date helper function that establishes today as the end_date and start_date as 7 days prior.'''
+    """ Date helper function that establishes today as the end_date and start_date as 7 days prior."""
+
     end_date = date.today()
     start_date = end_date - relativedelta(
         days=7
@@ -31,7 +29,14 @@ def get_default_dates() -> Tuple[str, str]:
 
 
 def parse_boe_rates(csv_text: str) -> Optional[float]:
-    '''Parses responses from get_boe_rates and extracts the latest Bank of England rate'''
+    """ Parses responses from get_boe_rates and extracts the latest Bank of England rate.
+
+    Args:
+        csv_text: The raw comma-separated string response from the published table scource.
+
+    Returns:
+        The latest base rate as a float if successful, otherwise None.
+    """
 
     f = StringIO(csv_text.strip())
     reader = csv.DictReader(f)
@@ -44,7 +49,7 @@ def parse_boe_rates(csv_text: str) -> Optional[float]:
 
     try:
 
-        raw_values = float(
+        raw_values = (
             latest_row.get('Bank Rate')
             or latest_row.get('Value')
             or latest_row.get('IUDBEDR')
@@ -55,11 +60,27 @@ def parse_boe_rates(csv_text: str) -> Optional[float]:
 
 
 def get_boe_rate(
-    start_date: str, end_date: str, url=URL
+    start_date: str, end_date: str
 ) -> Optional[Tuple[dict, dict]]:
+    """
+    Scrape live interest rate data from the published Bank of England tables.
+
+    Query the public statistical interactive database columns using a specified 
+    date range to extract the latest official base rate. If the web request fails 
+    or returns empty tabular data, the failure is logged and recorded.
+
+    Args:
+        start_date: The beginning of the query window formatted as DD/Mmm/YYYY. 
+        end_date: The end of the query window formatted as 'DD/Mmm/YYYY'.
+    
+    Returns:
+        A list containing 2 dictionaries:
+            - First dictionary holds successful records and date it was assessed.
+            - Second dictionary hold unsuccessful records and date it was assessed.
+    """
+    
     successful_records = {}
     invalid_records = {}
-    # Define this at the VERY top so all blocks can see it
     date_assessed = datetime.now().strftime('%d-%m-%Y')
     boe_rate = None
 
@@ -75,11 +96,11 @@ def get_boe_rate(
     }
 
     try:
-        response = requests.get(url, headers=HEADERS, params=params)
+        response = requests.get(url=URL, headers=HEADERS, params=params,timeout=5) # Added a 5 second timeout
         response.raise_for_status()
         boe_rate = parse_boe_rates(response.text)
     except Exception as e:
-        # Use f-string to avoid TypeError when adding Exception to String
+        # Used f-string to avoid TypeError when adding Exception to String
         invalid_records['Failed Rates'] = {
             'Rate': boe_rate,
             'Date accessed': date_assessed,
@@ -102,7 +123,7 @@ def get_boe_rate(
 
 
 def load_db(file_path: Path) -> dict:
-    '''Handles file I/O: Loading the JSON.'''
+    """Handles file I/O: Loading the JSON."""
     if file_path.exists():
         with open(file_path, 'r') as f:
             try:
@@ -113,13 +134,20 @@ def load_db(file_path: Path) -> dict:
 
 
 def save_db(file_path: Path, db: dict):
-    '''Handles file I/O: Saving the JSON.'''
+    """Handles file I/O: Saving the JSON."""
+
+    # Create a temporary file to protect the original JSON
+    # from corruption if the application crashes during writing.
+    temp_path = file_path.with_suffix('.tmp')
+
     with open(file_path, 'w') as f:
         json.dump(db, f, indent=4)
 
+    os.replace(temp_path, file_path)
+
 
 def get_effective_rate(new_entry: dict, history: list) -> float:
-    '''Pure Logic: Determines which rate to use.'''
+    """Pure Logic: Determines which rate to use."""
     # 1. Try Live
     if new_entry and new_entry.get('Rate') is not None:
 
