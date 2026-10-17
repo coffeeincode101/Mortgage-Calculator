@@ -9,6 +9,104 @@ from src.contract_checker import MortgageDataChecker
 from src.engine import MortgageCalculations, generate_schedule, calculate_initial_gap_days
 getcontext().rounding = ROUND_HALF_UP
 
+class RunMortgageSchedule(unittest.TestCase):
+
+    def setUp(self):
+        """Establish baseline mortgage parameters for schedule testing."""
+
+        self.term_years = 35
+        self.term_months = self.term_years * 12
+        self.interest_rate = Decimal("4.5")
+        self.balance = Decimal("200000.00")
+        self.start_date = datetime(2024, 1, 10)
+
+        self.purchase_price = Decimal("250000.00")
+        self.deposit = Decimal("50000.00")
+
+        self.fixed_deals = [(self.interest_rate, 35)]
+
+    def test_full_amortisation(self):
+
+        baseline = generate_schedule(
+            purchase_price=self.purchase_price,
+            deposit=self.deposit,
+            term_years=self.term_years,
+            start_date=self.start_date,
+            fixed_deals=self.fixed_deals,
+            variable_tracker=None,
+            overpayments=[],
+            one_off_overpayments=[],
+            fixed_deal_lengths=self.term_years,
+            months_remaining=self.term_months
+        )
+
+        self.assertFalse(baseline.empty)
+
+        self.assertEqual(
+            baseline.iloc[-1]['Balance'],
+            Decimal('0.00')
+        )
+
+        self.assertTrue(
+            all(
+                baseline.iloc[i]['Balance'] <= baseline.iloc[i-1]['Balance']
+                for i in range(1, len(baseline))
+            )
+        )
+
+        self.assertEqual(
+            sum(baseline['Principal']),
+            self.balance
+        )
+
+        self.assertTrue(
+            all(amount == Decimal("0.00") for amount in baseline["Overpayments"])
+        )
+
+        self.assertLessEqual(len(baseline), self.term_months)
+
+    def test_overpayments(self):
+            
+        baseline_with_overpayments = generate_schedule(
+            purchase_price=self.purchase_price,
+            deposit=self.deposit,
+            term_years=self.term_years,
+            start_date=self.start_date,
+            fixed_deals=self.fixed_deals,
+            variable_tracker=None,
+            overpayments=[(datetime(2024, 2, 1), Decimal('100.00'))],
+            one_off_overpayments=[],
+            fixed_deal_lengths=self.term_years,
+            months_remaining=self.term_months,
+        )
+
+        self.assertFalse(baseline_with_overpayments.empty)
+
+        self.assertEqual(
+            baseline_with_overpayments.iloc[0]['Overpayments'], 
+            Decimal('100.00')
+        )
+
+        self.assertEqual(
+            baseline_with_overpayments.iloc[1]['Overpayments'],
+            Decimal("100.00")
+        )
+
+        self.assertEqual(
+            baseline_with_overpayments.iloc[-1]['Balance'],
+            Decimal('0.00') 
+        )
+
+        self.assertEqual(
+            sum(baseline_with_overpayments["Principal"]),
+            self.balance
+        )
+
+        # Verify the mortgage finishes before its original term.
+        self.assertLess(
+            len(baseline_with_overpayments),
+            self.term_months,
+        )
 
 class TestMortgageLeapYearLogic(unittest.TestCase):
 
