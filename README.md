@@ -136,6 +136,25 @@ purchase_price = Decimal("220000.00")
 deposit = Decimal("60000.00")
 term_years = 35
 ```
+### Input Validation
+
+The application uses Pydantic v2 with strict type enforcement to validate mortgage inputs before calculations are performed.
+
+All monetary values and interest rates must be supplied using Python's `Decimal` type, including purchase prices, deposits, fixed and variable interest rates, recurring overpayments and one-off overpayments.
+
+For example:
+
+```python
+one_off_overpayments = [
+    (datetime(2026, 10, 1), Decimal('1000.00')),
+]
+```
+
+Standard integers, floating-point values and numeric strings are not accepted in place of `Decimal` monetary fields.
+
+Once validation succeeds, the application passes the validated Pydantic model values directly to the mortgage calculation engine. Derived values, including total fixed-rate deal durations and the mortgage term in months, are calculated from these validated inputs.
+
+This ensures that the data used in financial calculations is consistent with the data approved by the validation contract.
 
 ### First Payment Timing
 
