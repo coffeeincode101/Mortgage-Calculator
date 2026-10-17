@@ -54,7 +54,8 @@ cover/
 *.xlsx
 __pycache__/
 .pytest_cache/
-
+.DS_Store
+**/.DS_Store
 # Translations
 *.mo
 *.pot
