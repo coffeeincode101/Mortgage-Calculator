@@ -16,7 +16,7 @@ class MortgageDataChecker(BaseModel):
     deposit: Decimal = Field(gt=0)
     term_years: int = Field(le=MAX_MORTGAGE_TERM)
     fixed_deals: list[Tuple[Decimal, int]]
-    variable_tracker: Decimal
+    variable_tracker: Decimal | None = Field(default=None, ge=Decimal("0"))
     overpayments: List[Tuple[datetime, Decimal]]
     one_off_overpayments: List[Tuple[datetime, Decimal]] = Field(default_factory=list)
 
@@ -51,7 +51,7 @@ class MortgageDataChecker(BaseModel):
                     f"Record {index} conflicts with Record {original_index}."
                 )
             existing_months[lookup_month] = index
-
+        return payments
 
     @model_validator(mode='after')
     def enforce_contracts(self) -> 'MortgageDataChecker':
