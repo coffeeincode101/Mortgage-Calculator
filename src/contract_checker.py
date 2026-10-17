@@ -20,7 +20,7 @@ class MortgageDataChecker(BaseModel):
     overpayments: List[Tuple[datetime, Decimal]]
     one_off_overpayments: List[Tuple[datetime, Decimal]] = Field(default_factory=list)
 
-    @field_validator("one_off_overpayments", "overpayments", "fixed_deals", mode="before")
+    @field_validator('one_off_overpayments', 'overpayments', 'fixed_deals', mode='before')
     @classmethod
     def handle_empty_and_malformed(cls, v):
         # 1. Handle if the entire field is None or empty structure
@@ -32,6 +32,26 @@ class MortgageDataChecker(BaseModel):
             return [item for item in v if item]
             
         return v
+
+    @field_validator('one_off_overpayments', mode='after')
+    @classmethod
+    def validate_one_off_overpayments(cls, payments):
+        """Reject duplicate one-off payments within the same calendar month."""
+        existing_months = {}
+        
+        for index, (payment_date, amount) in enumerate(payments, start=1):
+            lookup_month = (payment_date.year, payment_date.month)
+
+            if lookup_month in existing_months:
+                original_index = existing_months[lookup_month]
+                raise ValueError(
+                    f"Duplicate recurring overpayment for "
+                    f"{payment_date.strftime('%B %Y')}. "
+                    f"Record {index} conflicts with Record {original_index}."
+                )
+            existing_months[lookup_month] = index
+        return payments
+
 
     @field_validator('overpayments' , mode='after')
     @classmethod

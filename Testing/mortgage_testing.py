@@ -303,6 +303,25 @@ class TestMortgageContract(unittest.TestCase):
             'one_off_overpayments': [(datetime(2024, 3, 2), Decimal('1000.00'))],
         }
 
+    def test_duplicate_one_off_overpayments(self):
+        """Verify duplicate one-off overpayments in the same month are rejected."""
+
+        broken_payload = self.valid_payload.copy()
+
+        broken_payload["one_off_overpayments"] = [
+            (datetime(2025, 3, 1), Decimal("1000.00")),
+            (datetime(2025, 6, 1), Decimal("2000.00")),
+            (datetime(2025, 3, 15), Decimal("500.00")),
+        ]
+
+        with self.assertRaises(ValidationError) as context:
+            MortgageDataChecker(**broken_payload)
+
+        self.assertIn(
+            "Record 3 conflicts with Record 1",
+            str(context.exception)
+        )
+
     def test_valid_payload_passes_contract(self):
         '''Ensure a completely clean payload initialises without any issues.'''
         try:
