@@ -224,7 +224,7 @@ docker images
 Create local directories for Excel exports and Bank of England rate history:
 
 ```bash
-mkdir -p Results data
+mkdir -p Schedules data
 ```
 
 These directories will be mounted inside the Docker container, allowing files to persist after the container exits.
@@ -233,7 +233,7 @@ These directories will be mounted inside the Docker container, allowing files to
 
 ```bash
 docker run --rm \
-  --mount type=bind,source="$(pwd)/Results",target=/app/output \
+  --mount type=bind,source="$(pwd)/Schedules",target=/app/output \
   --mount type=bind,source="$(pwd)/data",target=/app/data \
   mortgage-calculator:1.0
 ```
