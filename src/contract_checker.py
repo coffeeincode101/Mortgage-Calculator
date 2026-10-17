@@ -14,7 +14,10 @@ class MortgageDataChecker(BaseModel):
     start_date: datetime
     purchase_price: Decimal = Field(gt=MIN_PURCHASE_PRICE)
     deposit: Decimal = Field(gt=0)
-    term_years: int = Field(le=MAX_MORTGAGE_TERM)
+    term_years: int = Field(
+        gt=0,
+        le=MAX_MORTGAGE_TERM)
+    
     fixed_deals: list[Tuple[Decimal, int]]
     variable_tracker: Decimal | None = Field(default=None, ge=Decimal("0"))
     overpayments: List[Tuple[datetime, Decimal]]
@@ -33,6 +36,21 @@ class MortgageDataChecker(BaseModel):
             
         return v
 
+    @field_validator("fixed_deals", mode="after")
+    @classmethod
+    def validate_fixed_deal_durations(cls, deals):
+        """Reject fixed-rate deals with non-positive durations."""
+
+        for index, (rate, duration) in enumerate(deals, start=1):
+            if duration <= 0:
+                raise ValueError(
+                    f"Fixed-rate deal Record {index} has an invalid "
+                    f"duration of {duration} years. "
+                    f"Duration must be greater than zero."
+                )
+
+        return deals
+    
     @field_validator('one_off_overpayments', mode='after')
     @classmethod
     def validate_one_off_overpayments(cls, payments):

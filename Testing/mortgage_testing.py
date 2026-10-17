@@ -322,6 +322,17 @@ class TestMortgageContract(unittest.TestCase):
             str(context.exception)
         )
 
+    def test_invalid_mortgage_terms(self):
+        """Reject zero and negative mortgage terms."""
+
+        for invalid_term in [0, -1]:
+            with self.subTest(term=invalid_term):
+                broken_payload = self.valid_payload.copy()
+                broken_payload["term_years"] = invalid_term
+
+                with self.assertRaises(ValidationError):
+                    MortgageDataChecker(**broken_payload)
+
     def test_valid_payload_passes_contract(self):
         '''Ensure a completely clean payload initialises without any issues.'''
         try:
@@ -339,6 +350,26 @@ class TestMortgageContract(unittest.TestCase):
 
         self.assertIn('Input should be an instance of Decimal', str(context.exception))
 
+    def test_invalid_fixed_deal_durations(self):
+        """Reject fixed-rate deals with zero or negative durations."""
+
+        for invalid_duration in [0, -1]:
+            with self.subTest(duration=invalid_duration):
+                broken_payload = self.valid_payload.copy()
+
+                broken_payload["fixed_deals"] = [
+                    (Decimal("4.9"), 5),
+                    (Decimal("4.2"), invalid_duration)
+                ]
+
+                with self.assertRaises(ValidationError) as context:
+                    MortgageDataChecker(**broken_payload)
+
+                self.assertIn(
+                    "Fixed-rate deal Record 2",
+                    str(context.exception)
+                )
+                
     def test_strict_type_enforcement_blocks_string_integers(self):
         '''Verify that string representations of numbers are rejected under strict validation.'''
         broken_payload = self.valid_payload.copy()
