@@ -11,15 +11,41 @@ logger = logging.getLogger(__name__)
 
 
 class MortgageCalculations:
+    """
+    Calculate mortgage repayments using decimal-based amortisation.
+
+    Determine monthly repayment amounts, interest charges, principal
+    reductions and outstanding balances. Support additional overpayments,
+    broken-period interest and final mortgage settlement.
+    """
+
     TWOPLACES = Decimal("0.01")
     
-    def __init__(self, term: int, rate: Decimal, balance_remaining: Decimal, start_date: datetime):
+    def __init__(
+            self, 
+            term: int, 
+            rate: Decimal, 
+            balance_remaining: Decimal,  
+            comp_date: datetime,
+            ):
+
+        """
+        Initialise mortgage calculations for a repayment period.
+
+        Args:
+            term: Remaining mortgage term expressed in months.
+            rate: Annual mortgage interest rate expressed as a percentage.
+            balance_remaining: Outstanding mortgage principal.
+            comp_date: Original mortgage completion date used to determine
+                the daily interest divisor for the broken-interest period.
+        """
+
         self.term = term
         balance_clean = balance_remaining.quantize(self.TWOPLACES)
         raw_rate = (rate / Decimal("100")) / Decimal("12")
 
         # FIXED: Dynamically toggle between 365 and 366 based on the completion year
-        days_in_year = 366 if calendar.isleap(start_date.year) else 365
+        days_in_year = 366 if calendar.isleap(comp_date.year) else 365
 
         self.day_rate = (rate / Decimal("100")) / Decimal(str(days_in_year))
         self.monthly_interest = raw_rate
@@ -28,7 +54,22 @@ class MortgageCalculations:
         logger.info(f'Initialised new calculation period using {rate}% , Term is {term} months')
 
     def calculate_monthly_payment(self, balance: Decimal) -> Decimal:
-        '''Calculates the fixed baseline monthly amount using the standard amortization formula'''
+        """
+        Calculate the baseline monthly mortgage repayment.
+
+        Apply the standard amortisation formula using the outstanding
+        principal, monthly interest rate and remaining repayment term.
+        Handle zero-interest mortgages and non-positive repayment terms.
+
+        Args:
+            balance: Outstanding mortgage principal.
+
+        Returns:
+            The calculated monthly repayment as a Decimal, rounded to
+            two decimal places. Positive-term repayments are rounded
+            upwards when the standard amortisation formula is used.
+        """
+        
         monthly_rate = self.monthly_interest
         one = Decimal("1")
         
@@ -50,7 +91,39 @@ class MortgageCalculations:
             is_last_month: bool = False, 
             is_first_month: bool = False,
             ) -> Dict[str, Any]:
-        '''Breaks down the monthly amount by interest, overpayment and updates the remaining balance'''
+        """
+        Calculate the monthly mortgage repayment breakdown.
+
+        Determine the interest charged, principal repaid and remaining
+        mortgage balance for a single repayment period. Account for
+        additional overpayments, broken-period interest during the
+        first repayment month and adjustments required to settle
+        the outstanding balance in the final repayment period.
+
+        Args:
+            overpayments: Additional amount paid towards the mortgage
+                principal during the current repayment period.
+            balance: Outstanding mortgage principal before repayment.
+            initial_days_accrued: Number of broken-period interest days
+                accrued during the completion month. Defaults to 0.
+            is_last_month: Whether the current period is the final
+                scheduled mortgage repayment month. Defaults to False.
+            is_first_month: Whether the current period is the first
+                repayment month, requiring broken-period interest.
+                Defaults to False.
+
+        Returns:
+            A dictionary containing the repayment breakdown:
+
+                Total Monthly Amount: Total amount payable for the period.
+                Principal: Total principal reduction, including overpayments.
+                Interest: Interest charged during the repayment period.
+                Overpayments: Additional payment applied to the principal.
+                Raw Balance: Outstanding principal after repayment.
+                Balance: Outstanding principal after repayment.
+
+            All monetary values are Decimal instances rounded to
+            two decimal places."""
 
         overpayments = (overpayments).quantize(self.TWOPLACES)
         balance = (balance).quantize(self.TWOPLACES)
@@ -76,11 +149,19 @@ class MortgageCalculations:
 
         # TRAP DOOR: If the principal covers it OR we're dynamically flagged as the last calendar month
         if total_principal_reduction >= balance or is_last_month:
+        # Calculate the remaining principal before clearing the balance.
+            remaining_principal = max(
+                Decimal("0.00"),
+                balance - principal_from_payment
+            )
+            # Cap the overpayment to the amount actually required.
+            overpayments = min(overpayments, remaining_principal)
+
             amt = (balance + interest_amount).quantize(self.TWOPLACES)
             total_principal_reduction = balance
             balance = Decimal("0.00")
-            overpayments = Decimal("0.00")
-            logger.info(f'Final payment process triggered. Balance cleared to zero.')
+
+            logger.info("Final payment processed. Balance cleared to zero.")
         else:
             amt = Decimal(monthly_payment_cast + overpayments).quantize(self.TWOPLACES)
             balance = Decimal(balance - total_principal_reduction).quantize(self.TWOPLACES)
@@ -98,8 +179,17 @@ class MortgageCalculations:
 
 def calculate_initial_gap_days(start_date: datetime) -> int:
     """
-    Finds the total count of broken initial days from completion date 
-    up to the final day of that initial month (inclusive).
+    Calculate the inclusive broken-period days following completion.
+
+    Determine the number of calendar days between the mortgage
+    completion date and the final day of the completion month,
+    including the completion date itself.
+
+    Args:
+        start_date: Date on which the mortgage completes.
+
+    Returns:
+        Number of calendar days in the initial broken-interest period.
     """
     # For a start date of 07/12/2023, this accurately isolates 31/12/2023
     end_of_completion_month = (start_date + relativedelta(months=1)).replace(day=1) - relativedelta(days=1)
@@ -120,7 +210,39 @@ def generate_schedule(
     fixed_deal_lengths: int,
     months_remaining: int
 ) -> pd.DataFrame:
-    """Creates the separate buckets for each fixed deal entered."""
+    """
+    Generate a mortgage repayment schedule across successive rate periods.
+
+    Process fixed-rate deals and an optional variable-rate period,
+    recalculating monthly repayments at each rate transition using
+    the outstanding balance and remaining mortgage term.
+
+    Apply recurring and one-off overpayments, account for initial
+    broken-period interest and stop when the mortgage is fully repaid
+    or the configured rate periods are exhausted.
+
+    Args:
+        purchase_price: Total purchase price of the property.
+        deposit: Initial deposit deducted from the purchase price.
+        term_years: Original mortgage repayment term in years.
+        start_date: Mortgage completion date.
+        fixed_deals: List of tuples containing annual interest rates
+            and their respective fixed-period durations in years.
+        variable_tracker: Annual interest rate applied after the
+            fixed-rate periods, expressed as a percentage.
+        overpayments: List of tuples specifying the effective date
+            and amount of recurring monthly overpayments.
+        one_off_overpayments: List of tuples specifying the date
+            and amount of individual additional repayments.
+        fixed_deal_lengths: Combined duration of fixed-rate deals
+            expressed in years.
+        months_remaining: Remaining mortgage repayment term in months.
+
+    Returns:
+        A pandas DataFrame containing the monthly repayment schedule,
+        including dates, total payments, principal reductions,
+        interest charges, overpayments and outstanding balances.
+    """
 
     TWOPLACES = Decimal("0.01")
     schedule = []
@@ -147,7 +269,7 @@ def generate_schedule(
 
     for rate, deal_length in all_deals:
         months = deal_length * 12
-        calc_monthly = MortgageCalculations(months_remaining, rate, balance, start_date=cur_month)
+        calc_monthly = MortgageCalculations(months_remaining, rate, balance, comp_date=start_date)
 
         for _ in range(months):
             if balance <= 0:
