@@ -156,6 +156,21 @@ Once validation succeeds, the application passes the validated Pydantic model va
 
 This ensures that the data used in financial calculations is consistent with the data approved by the validation contract.
 
+### Additional Validation Rules
+
+The mortgage input contract enforces the following business rules:
+
+- Fixed interest rates must be **greater than 0%**.
+- Variable interest rates, when provided, must be **greater than 0%**.
+- Fixed-rate deal durations must be positive integers.
+- Combined fixed-rate deal durations cannot exceed the mortgage term.
+- Recurring and one-off overpayments cannot contain negative amounts.
+- Duplicate recurring or one-off overpayment records within the same calendar month are rejected.
+- Malformed or empty individual records are rejected rather than silently discarded.
+- Empty overpayment lists are permitted when no overpayments are scheduled.
+
+Invalid inputs are rejected before reaching the mortgage calculation engine, helping protect the accuracy and integrity of the generated repayment schedule.
+
 ### First Payment Timing
 
 The schedule assumes regular payments are collected on the **first day of each calendar month**, beginning in the month after completion.

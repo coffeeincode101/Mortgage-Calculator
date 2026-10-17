@@ -431,6 +431,30 @@ class TestMortgageContract(unittest.TestCase):
             ],
         }
 
+    def test_invalid_fixed_interest_rates(self):
+        '''Reject zero and negative fixed interest rates.'''
+
+        for invalid_rate in [Decimal('0'), Decimal('-0.5')]:
+            with self.subTest(rate=invalid_rate):
+                broken_payload = self.valid_payload.copy()
+
+                broken_payload['fixed_deals'] = [
+                    (invalid_rate, 5),
+                    (Decimal('4.2'), 2),
+                ]
+
+                with self.assertRaises(ValidationError):
+                    MortgageDataChecker(**broken_payload)
+
+    def test_zero_variable_tracker_rejected(self):
+        '''Reject a zero variable interest rate.'''
+
+        broken_payload = self.valid_payload.copy()
+        broken_payload['variable_tracker'] = Decimal('0')
+
+        with self.assertRaises(ValidationError):
+            MortgageDataChecker(**broken_payload)
+
     def test_duplicate_one_off_overpayments(self):
         """Reject multiple one-off overpayments within a single month."""
 

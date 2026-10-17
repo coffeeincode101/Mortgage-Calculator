@@ -19,34 +19,29 @@ class MortgageDataChecker(BaseModel):
         le=MAX_MORTGAGE_TERM)
     
     fixed_deals: list[Tuple[Decimal, int]]
-    variable_tracker: Decimal | None = Field(default=None, ge=Decimal("0"))
+    variable_tracker: Decimal | None = Field(default=None, gt=Decimal("0"))
     overpayments: List[Tuple[datetime, Decimal]]
     one_off_overpayments: List[Tuple[datetime, Decimal]] = Field(default_factory=list)
 
-    @field_validator('one_off_overpayments', 'overpayments', 'fixed_deals', mode='before')
-    @classmethod
-    def handle_empty_and_malformed(cls, v):
-        # 1. Handle if the entire field is None or empty structure
-        if not v:
-            return []
-        
-        # 2. Filter out any internal empty items (like [] or ()) that break strict unpacking
-        if isinstance(v, list):
-            return [item for item in v if item]
-            
-        return v
-
     @field_validator('fixed_deals', mode='after')
     @classmethod
-    def validate_fixed_deal_durations(cls, deals):
-        """Reject fixed-rate deals with non-positive durations."""
+    def validate_fixed_deals(cls, deals):
+        '''Reject negative rates and non-positive deal durations.'''
 
         for index, (rate, duration) in enumerate(deals, start=1):
+
+            if rate <= 0:
+                raise ValueError(
+                    f'Fixed-rate deal Record {index} has an invalid '
+                    f'interest rate of {rate}%. '
+                    f'Interest rates must be greater than zero.'
+                )
+
             if duration <= 0:
                 raise ValueError(
-                    f"Fixed-rate deal Record {index} has an invalid "
-                    f"duration of {duration} years. "
-                    f"Duration must be greater than zero."
+                    f'Fixed-rate deal Record {index} has an invalid '
+                    f'duration of {duration} years. '
+                    f'Duration must be greater than zero.'
                 )
 
         return deals
@@ -63,7 +58,7 @@ class MortgageDataChecker(BaseModel):
             if lookup_month in existing_months:
                 original_index = existing_months[lookup_month]
                 raise ValueError(
-                    f"Duplicate recurring overpayment for "
+                    f"Duplicate recurring one-off overpayment for "
                     f"{payment_date.strftime('%B %Y')}. "
                     f"Record {index} conflicts with Record {original_index}."
                 )
