@@ -8,9 +8,9 @@ from pathlib import Path
 import os
 import json
 import logging
-from utils import time_it
 
-from settings import URL, HEADERS
+from src.utils import time_it
+from src.settings import URL, HEADERS
 
 # Create a modular logger tied to this module's namespace path.
 # Child logger sends message to the root logger, initialised in mortgage.py

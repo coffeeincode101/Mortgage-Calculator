@@ -3,10 +3,17 @@ import calendar
 from decimal import Decimal, ROUND_HALF_UP, getcontext
 from datetime import datetime
 from pydantic import ValidationError
+import json
+from unittest.mock import patch
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from src.boe_scraper import save_db, load_db
 from src.settings import MAX_MORTGAGE_TERM, MIN_PURCHASE_PRICE, DEFAULT_VARIABLE_ADD_ON, DEFAULT_CURRENCY_SYMBOL
 from src.contract_checker import MortgageDataChecker
 from src.engine import MortgageCalculations, generate_schedule, calculate_initial_gap_days
+
+
 getcontext().rounding = ROUND_HALF_UP
 
 class RunMortgageSchedule(unittest.TestCase):
@@ -538,6 +545,140 @@ class TestMortgageMath(unittest.TestCase):
         expected_value = (self.calc.monthly_total_payment - Decimal('10.00')) + overpayment
 
         self.assertEqual(result['Principal'], expected_value.quantize(Decimal('0.01')), )
+
+class TestBoEFile(unittest.TestCase):
+    """Verify Bank of England JSON persistence behaviour."""
+
+    def test_save_db_creates_json(self):
+        """Verify save_db creates a valid JSON file."""
+
+        # Arrange: Create an isolated temporary directory.
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "boe_rate.json"
+
+            test_data = {
+                "Successful": [
+                    {
+                        "Rate": 4.5,
+                        "Date accessed": "17-10-2026"
+                    }
+                ],
+                "Failed": []
+            }
+
+            # Confirm the file does not already exist.
+            self.assertFalse(file_path.exists())
+
+            # Act: Save the test data.
+            save_db(file_path, test_data)
+
+            # Assert: Verify the file was created.
+            self.assertTrue(file_path.exists())
+
+            # Read the file and verify the stored contents.
+            with open(file_path, "r", encoding="utf-8") as f:
+                saved_data = json.load(f)
+
+            self.assertEqual(saved_data, test_data)
+
+            # Verify the temporary file was replaced.
+            self.assertFalse(
+                file_path.with_suffix(".tmp").exists()
+            )
+    def test_save_db_preserves_history(self):
+        """Verify existing rate history survives subsequent JSON writes."""
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "boe_rate.json"
+
+            # Arrange: Create an existing historical record.
+            original_data = {
+                "Successful": [
+                    {
+                        "Rate": 4.5,
+                        "Date accessed": "01-10-2026"
+                    }
+                ],
+                "Failed": []
+            }
+
+            save_db(file_path, original_data)
+
+            # Act: Load history and append a new rate.
+            db = load_db(file_path)
+
+            new_record = {
+                "Rate": 4.25,
+                "Date accessed": "17-10-2026"
+            }
+
+            db["Successful"].append(new_record)
+
+            save_db(file_path, db)
+
+            # Assert: Verify both records have been preserved.
+            updated_db = load_db(file_path)
+
+            self.assertEqual(
+                len(updated_db["Successful"]),
+                2
+            )
+
+            self.assertEqual(
+                updated_db["Successful"][0],
+                original_data["Successful"][0]
+            )
+
+            self.assertEqual(
+                updated_db["Successful"][1],
+                new_record
+            )
+    
+    def test_failed_write_preserves_original(self):
+        """Verify a failed JSON write does not corrupt existing data."""
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "boe_rate.json"
+
+            # Arrange: Save an existing valid record.
+            original_data = {
+                "Successful": [
+                    {
+                        "Rate": 4.5,
+                        "Date accessed": "01-10-2026"
+                    }
+                ],
+                "Failed": []
+            }
+
+            save_db(file_path, original_data)
+
+            updated_data = {
+                "Successful": [
+                    {
+                        "Rate": 4.25,
+                        "Date accessed": "17-10-2026"
+                    }
+                ],
+                "Failed": []
+            }
+
+            # Act: Simulate a failure during JSON writing.
+            with patch(
+                "src.boe_scraper.json.dump",
+                side_effect=OSError("Simulated disk write failure")
+            ):
+                with self.assertRaises(OSError):
+                    save_db(file_path, updated_data)
+
+            # Assert: Original data must remain intact.
+            preserved_data = load_db(file_path)
+
+            self.assertEqual(
+                preserved_data,
+                original_data,
+                "Original JSON must survive an interrupted write."
+            )
 
 if __name__== '__main__':
     unittest.main()
