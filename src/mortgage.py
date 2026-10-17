@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Optional
 from pydantic import ValidationError
+import json
 
 from src.utils import get_output_path, time_it
 from src.settings import (
@@ -18,6 +19,46 @@ from src.contract_checker import MortgageDataChecker
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+def load_config() -> dict:
+    """Load mortgage configuration from the project root."""
+
+    config_path = Path(__file__).resolve().parent.parent / 'config.json'
+
+    with config_path.open('r', encoding='utf-8') as file:
+        return json.load(file)
+
+
+def parse_config(config: dict) -> dict:
+    """Convert JSON configuration into mortgage input types."""
+
+    return {
+        'purchase_price': Decimal(config['purchase_price']),
+        'deposit': Decimal(config['deposit']),
+        'term_years': config['term_years'],
+        'start_date': datetime.fromisoformat(config['start_date']),
+
+        'fixed_deals': [
+            (Decimal(deal['rate']), deal['years'])
+            for deal in config['fixed_deals']
+        ],
+
+        'overpayments': [
+            (
+                datetime.fromisoformat(payment['date']),
+                Decimal(payment['amount'])
+            )
+            for payment in config.get('overpayments', [])
+        ],
+
+        'one_off_overpayments': [
+            (
+                datetime.fromisoformat(payment['date']),
+                Decimal(payment['amount'])
+            )
+            for payment in config.get('one_off_overpayments', [])
+        ],
+    }
 
 @time_it
 def validate_inputs(
@@ -88,39 +129,29 @@ def save_to_excel(df: pd.DataFrame) -> None:
 
     return None
 
+
 if __name__ == '__main__':
-    
-    my_deals = [(Decimal('4.9'), 5), (Decimal('4.2'), 2), (Decimal('3.8'), 5)]
 
-    monthly_overpayments = [
-        (datetime(2024, 3, 1), Decimal('100')),
-        (datetime(2028, 12, 1), Decimal('200')),
-        (datetime(2030, 12, 1), Decimal('400')),
-    ]
+    # Load and parse mortgage configuration from config.json.
+    mortgage_config = parse_config(load_config())
 
-    start_date = datetime(2023, 12, 7)
-    purchase_price = Decimal('220000')
-    deposit = Decimal('60000')
-    term_years = 35
-    one_off_overpayments = [
-        (datetime(2026, 10, 1), Decimal('1000.00')),
-    ] #When add data make sure to use "(datetime(yyy, mm , dd), Decimal('1000'))" for each one-off payments
-
-    # Get external rate data
-    get_boe_rate = Decimal(str(fetch_boe_base_rate())) + DEFAULT_VARIABLE_ADD_ON
-    
-     
-    df = validate_inputs(
-        purchase_price=purchase_price,
-        deposit=deposit,
-        term_years=term_years,
-        start_date=start_date,
-        fixed_deals=my_deals,
-        variable_tracker=get_boe_rate,  
-        overpayments=monthly_overpayments,
-        one_off_overpayments=one_off_overpayments,
+    # Retrieve the Bank of England rate and apply the tracker margin.
+    get_boe_rate = (
+        Decimal(str(fetch_boe_base_rate()))
+        + DEFAULT_VARIABLE_ADD_ON
     )
 
-    pd.options.display.float_format = f'{DEFAULT_CURRENCY_SYMBOL}{{:,.2f}}'.format
+    # Validate mortgage inputs and generate the repayment schedule.
+    df = validate_inputs(
+        **mortgage_config,
+        variable_tracker=get_boe_rate
+    )
+
+    # Preserve currency formatting for pandas output.
+    pd.options.display.float_format = (
+        f'{DEFAULT_CURRENCY_SYMBOL}{{:,.2f}}'.format
+    )
+
+    # Export the completed mortgage schedule to Excel.
     if df is not None:
         save_to_excel(df)

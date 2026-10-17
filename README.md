@@ -1,318 +1,479 @@
 # Mortgage Amortisation Schedule Generator
 
-A Python application for generating detailed mortgage repayment forecasts. It models monthly interest, principal reductions, changes between fixed-rate deals, recurring and one-off overpayments, and an optional Bank of England–linked variable-rate period.
+A Python application for generating detailed mortgage repayment forecasts, including monthly interest, principal reductions, fixed-rate transitions, recurring and one-off overpayments, and Bank of England–linked variable-rate modelling.
 
-Calculations use Python's `Decimal` type to avoid binary floating-point rounding errors in monetary values. The application produces a month-by-month amortisation schedule and exports it to a formatted Excel workbook.
+The application uses Python's `Decimal` type for financial calculations, Pydantic v2 for strict input validation, and pandas with XlsxWriter to produce formatted Excel amortisation schedules.
 
-The application also supports **Docker containerisation**, allowing it to run within an isolated Python environment without requiring its dependencies to be installed directly on the host machine.
+Mortgage inputs are managed through an editable **`config.json` file**, allowing users to generate different forecasts without modifying the Python source code.
+
+The project also includes Docker containerisation, automated regression and integration tests, and GitHub Actions continuous integration.
 
 ## Key Features
 
-- **First-payment broken-period interest:** Adds interest accrued from the mortgage completion date through the end of that calendar month (inclusive) to the standard interest for the first repayment month. The additional interest is added to the first payment, preserving the scheduled principal contribution.
-- **Decimal-based calculations:** Uses `Decimal` and two-decimal-place quantisation for monetary calculations, with defined repayment rounding behaviour.
-- **Strict input validation:** Uses Pydantic v2 models to validate data types and business constraints, including purchase price, deposit, mortgage term, rate-deal durations and overpayment values.
-- **Completion-year leap-year handling:** Selects a 365- or 366-day divisor for the initial broken-interest period based on the mortgage completion year. Standard monthly interest is calculated using the annual rate divided by 12; the engine does not recalculate daily interest across every subsequent calendar year.
-- **Multiple mortgage deals:** Processes successive fixed-rate periods and recalculates the scheduled payment when a new rate period begins, using the remaining principal and term.
-- **Bank of England–linked tracker modelling:** When fixed-rate periods do not cover the full term, the application can use a retrieved Bank Rate plus the configured tracker margin (0.5 percentage points in the supplied configuration) for the remaining period. This is a modelling assumption, not a forecast of future Bank Rate changes.
-- **Flexible overpayments:** Supports changes to ongoing monthly overpayments and individual one-off payments. Early settlement caps applied overpayments to the principal still outstanding.
-- **Excel export:** Produces a formatted `.xlsx` repayment schedule with monthly payments, principal, interest, overpayments and remaining balance.
-- **Python compatibility:** The mortgage calculator targets Python 3.11 through 3.15. A GitHub Actions continuous integration workflow runs the regression test suite against each supported Python version on pushes and pull requests to `main`.
-- **Docker containerisation:** Packages the application and its dependencies using a Python 3.15 slim image, providing an isolated execution environment. Supports persistent Excel exports and Bank of England rate history through Docker bind mounts.
+- **Mortgage amortisation:** Calculates monthly payments, interest, principal reductions, overpayments and outstanding balances.
+- **Fixed-rate transitions:** Supports consecutive fixed-rate deals and recalculates repayments based on the remaining balance and mortgage term.
+- **Bank of England integration:** Retrieves the published Bank Rate and applies a configurable tracker margin for the variable-rate period.
+- **Broken-period interest:** Calculates additional interest accrued between the completion date and the end of the completion month.
+- **Leap-year handling:** Uses the appropriate 365- or 366-day divisor when calculating initial broken-period interest.
+- **Recurring overpayments:** Supports changes to monthly overpayment amounts at specified dates.
+- **One-off overpayments:** Allows additional individual payments to reduce the outstanding balance.
+- **Strict validation:** Uses Pydantic v2 to enforce data types and mortgage business rules.
+- **JSON configuration:** Allows mortgage inputs to be changed without editing application code.
+- **Excel export:** Generates a formatted `.xlsx` workbook containing the repayment schedule.
+- **Docker support:** Allows the application to run without installing Python dependencies on the host machine.
+- **Automated testing:** Supports Python 3.11–3.15 through GitHub Actions.
 
 ## Project Architecture
 
 ```text
 Mortgage-Calculator/
 ├── .github/
-│   └── workflows/            # Automated Python compatibility tests
+│   └── workflows/             # Continuous integration
 ├── src/
-│   ├── mortgage.py           # Application orchestration and entry point
-│   ├── engine.py             # Amortisation calculations and schedule generation
-│   ├── boe_scraper.py        # Bank of England rate retrieval and cache management
-│   ├── contract_checker.py   # Pydantic input validation
-│   ├── settings.py           # Application constants and configuration
-│   └── utils.py              # Shared utilities, including timing helpers
+│   ├── mortgage.py            # Application orchestration and Excel export
+│   ├── engine.py              # Mortgage calculation engine
+│   ├── contract_checker.py    # Pydantic input validation
+│   ├── boe_scraper.py         # Bank of England rate retrieval
+│   ├── settings.py            # Application configuration
+│   └── utils.py               # Shared utilities
 ├── Testing/
-│   └── mortgage_testing.py   # Unit and regression tests
+│   └── mortgage_testing.py    # Automated tests
+├── config.json                # Editable mortgage inputs
 ├── data/
-│   └── boe_rate.json         # Cached successful and failed rate retrievals
-├── Dockerfile                # Container build configuration
-├── .dockerignore             # Excludes unnecessary files from Docker builds
+│   └── boe_rate.json          # Bank of England cache
+├── Schedules/                 # Generated Excel schedules
+├── Dockerfile
+├── .dockerignore
 ├── .gitignore
-├── pyproject.toml            # Dependency definitions and version constraints
+├── pyproject.toml
 └── README.md
 ```
 
 The architecture separates application orchestration, input validation, financial calculations, external data retrieval and output generation.
 
-## Bank of England Rate Integration
+## Mortgage Configuration
 
-The rate-retrieval module queries the Bank of England's published statistical data for the Bank Rate series (`IUDBEDR`).
+Mortgage inputs are managed through `config.json`, located in the repository root.
 
-The integration includes:
+Users can modify their mortgage details without editing Python source code.
 
-- A seven-day retrieval window for recent published rates.
-- A five-day local cache to reduce unnecessary HTTP requests.
-- A five-second request timeout to avoid indefinitely waiting for responses.
-- JSON-based storage of successful retrievals and failed attempts.
-- Historical-rate fallback when live retrieval fails.
-- Temporary-file writing and atomic replacement to reduce the risk of corrupted JSON during interrupted writes.
+### Example config.json
 
-If neither live data nor a historical successful rate is available, the application raises an error instead of silently inventing a rate.
+```json
+{
+  "purchase_price": "220000.00",
+  "deposit": "60000.00",
+  "term_years": 35,
+  "start_date": "2023-12-07",
+  "fixed_deals": [
+    {
+      "rate": "4.9",
+      "years": 5
+    },
+    {
+      "rate": "4.2",
+      "years": 2
+    },
+    {
+      "rate": "3.8",
+      "years": 5
+    }
+  ],
+  "overpayments": [
+    {
+      "date": "2024-03-01",
+      "amount": "100.00"
+    },
+    {
+      "date": "2028-12-01",
+      "amount": "200.00"
+    },
+    {
+      "date": "2030-12-01",
+      "amount": "400.00"
+    }
+  ],
+  "one_off_overpayments": []
+}
+```
 
-**Important:** A cached or newly retrieved Bank Rate represents a point-in-time value. The calculator does not predict future rate decisions or changes to a lender's tracker terms.
+### Configuration Parameters
 
-## Prerequisites and Installation
+| Parameter | Description |
+|---|---|
+| `purchase_price` | Property purchase price |
+| `deposit` | Initial mortgage deposit |
+| `term_years` | Total mortgage term in years |
+| `start_date` | Mortgage completion date |
+| `fixed_deals` | Fixed interest rates and their durations in years |
+| `overpayments` | Changes to recurring monthly overpayment amounts |
+| `one_off_overpayments` | Individual additional payments |
 
-Python 3.11–3.15 is supported and tested through GitHub Actions. Project dependencies and compatible version constraints are managed centrally in [pyproject.toml](pyproject.toml).
+### One-Off Overpayment Example
 
-### 1. Clone the repository
+To add individual overpayments, modify the `one_off_overpayments` section:
+
+```json
+"one_off_overpayments": [
+  {
+    "date": "2026-10-01",
+    "amount": "1000.00"
+  },
+  {
+    "date": "2028-05-01",
+    "amount": "5000.00"
+  }
+]
+```
+
+If no additional payments are required, use an empty list:
+
+```json
+"one_off_overpayments": []
+```
+
+### Configuration Rules
+
+- Store monetary amounts and interest rates as JSON strings to preserve decimal precision.
+- Use `YYYY-MM-DD` for dates.
+- Mortgage terms and fixed-deal durations must be integers.
+- Fixed interest rates must be greater than 0%.
+- Variable interest rates must be greater than 0% when provided to the validation contract.
+- Combined fixed-rate durations cannot exceed the mortgage term.
+- The deposit must be greater than zero and less than the purchase price.
+- Overpayment amounts cannot be negative.
+- Multiple recurring overpayment changes in the same calendar month are rejected.
+- Multiple one-off overpayments in the same calendar month are rejected.
+- Malformed individual records are rejected rather than silently discarded.
+- Empty overpayment lists are permitted.
+
+### Configuration Processing
+
+The application follows this sequence:
+
+1. `load_config()` reads `config.json`.
+2. `parse_config()` converts the JSON values into Python types, including `Decimal`, `datetime` and tuples.
+3. The application obtains the Bank of England rate and applies the configured tracker margin.
+4. `MortgageDataChecker` validates the mortgage inputs.
+5. The validated values are passed to the calculation engine.
+6. The resulting amortisation schedule is exported to Excel.
+
+The configuration parser handles data conversion, while Pydantic enforces the mortgage input contract.
+
+**When using Docker, changes to `config.json` take effect on the next container run without rebuilding the image.**
+
+## Installation — Running with Python
+
+Python 3.11–3.15 is supported.
+
+Dependencies are defined in `pyproject.toml`.
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/coffeeincode101/Mortgage-Calculator.git
 cd Mortgage-Calculator
 ```
 
-### 2. Create and activate a virtual environment (macOS/Linux)
+### 2. Create a Virtual Environment
+
+On macOS or Linux:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install dependencies
+On Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Install Dependencies
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install --group runtime
 ```
 
-### 4. Environment configuration
+### 4. Configure Mortgage Inputs
 
-Configure local environment settings as needed. For example, if supported by your application configuration, create a `.env` file in the project root:
+Open `config.json` and modify the mortgage details.
 
-```dotenv
-MORTGAGE_OUTPUT=/path/to/your/output/directory
-LOG_LEVEL=INFO
-```
+Save the configuration before executing the application.
 
-Do not commit `.env` files containing local paths or secrets.
+### 5. Run the Application
 
-## Running the Application
-
-From the project root, run:
+From the repository root:
 
 ```bash
 python -m src.mortgage
 ```
 
-### Example Input
-
-The following illustrates the mortgage inputs used by the project. Configure them in the application's entry point or wherever your current input flow supplies the corresponding values.
-
-```python
-from datetime import datetime
-from decimal import Decimal
-
-my_deals = [
-    (Decimal("4.9"), 5),
-    (Decimal("4.2"), 2),
-    (Decimal("3.8"), 5),
-]
-
-monthly_overpayments = [
-    (datetime(2024, 3, 1), Decimal("100.00")),
-    (datetime(2028, 12, 1), Decimal("200.00")),
-    (datetime(2030, 12, 1), Decimal("400.00")),
-]
-
-one_off_overpayments = [
-    (datetime(2025, 3, 1), Decimal("1000.00")),
-    (datetime(2029, 3, 1), Decimal("3000.00")),
-]
-
-start_date = datetime(2023, 12, 7)
-purchase_price = Decimal("220000.00")
-deposit = Decimal("60000.00")
-term_years = 35
-```
-### Input Validation
-
-The application uses Pydantic v2 with strict type enforcement to validate mortgage inputs before calculations are performed.
-
-All monetary values and interest rates must be supplied using Python's `Decimal` type, including purchase prices, deposits, fixed and variable interest rates, recurring overpayments and one-off overpayments.
-
-For example:
-
-```python
-one_off_overpayments = [
-    (datetime(2026, 10, 1), Decimal('1000.00')),
-]
-```
-
-Standard integers, floating-point values and numeric strings are not accepted in place of `Decimal` monetary fields.
-
-Once validation succeeds, the application passes the validated Pydantic model values directly to the mortgage calculation engine. Derived values, including total fixed-rate deal durations and the mortgage term in months, are calculated from these validated inputs.
-
-This ensures that the data used in financial calculations is consistent with the data approved by the validation contract.
-
-### Additional Validation Rules
-
-The mortgage input contract enforces the following business rules:
-
-- Fixed interest rates must be **greater than 0%**.
-- Variable interest rates, when provided, must be **greater than 0%**.
-- Fixed-rate deal durations must be positive integers.
-- Combined fixed-rate deal durations cannot exceed the mortgage term.
-- Recurring and one-off overpayments cannot contain negative amounts.
-- Duplicate recurring or one-off overpayment records within the same calendar month are rejected.
-- Malformed or empty individual records are rejected rather than silently discarded.
-- Empty overpayment lists are permitted when no overpayments are scheduled.
-
-Invalid inputs are rejected before reaching the mortgage calculation engine, helping protect the accuracy and integrity of the generated repayment schedule.
-
-### First Payment Timing
-
-The schedule assumes regular payments are collected on the **first day of each calendar month**, beginning in the month after completion.
-
-For a completion date of 7 December 2023, the first scheduled payment is 1 January 2024 and includes **25 days** of initial broken-period interest (7–31 December, inclusive) in addition to January's standard monthly interest.
-
-The application then generates a monthly schedule and exports it as a formatted Excel workbook to the configured output location.
+The application loads the configuration, validates the inputs, calculates the amortisation schedule and exports the resulting Excel workbook to its configured output location.
 
 ## Docker Deployment
 
-The mortgage calculator can run inside a Docker container, providing a consistent Python environment independently of the host machine's installed packages.
+Docker allows the application to run inside an isolated Python environment without requiring Python or the project dependencies to be installed on the host computer.
 
-The Docker configuration uses:
+The Docker image uses Python 3.15 slim and runs the application as a non-root user.
 
-- **Python 3.15 slim:** A smaller Python base image containing the runtime needed to execute the application.
-- **Centralised dependency management:** Installs dependencies directly from `pyproject.toml`.
-- **Isolated execution:** Runs the application inside the container rather than the host Python environment.
-- **Non-root execution:** Uses a dedicated application user to limit unnecessary container privileges.
-- **Persistent file storage:** Uses bind mounts to retain generated Excel files and cached Bank of England rates outside the container.
-- **Docker build exclusions:** Uses `.dockerignore` to prevent unnecessary project files, virtual environments and local configuration from entering the image.
+### Prerequisites
 
-### 1. Install Docker
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and ensure it is running.
 
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and ensure the Docker Engine is running.
+Git is required to clone the repository.
 
-Verify the installation:
+### macOS / Linux
+
+#### 1. Clone the Repository
 
 ```bash
-docker --version
-docker info
+git clone https://github.com/coffeeincode101/Mortgage-Calculator.git
+cd Mortgage-Calculator
 ```
 
-### 2. Build the Docker image
-
-From the project's root directory, execute:
+#### 2. Build the Docker Image
 
 ```bash
-docker build -t mortgage-calculator:1.0 .
+docker build -t mortgage-calculator:1.2 .
 ```
 
-Docker will download the Python base image if necessary, install the application dependencies and package the source code into a container image.
-
-Verify the image:
-
-```bash
-docker images
-```
-
-### 3. Prepare persistent storage
-
-Create local directories for Excel exports and Bank of England rate history:
+#### 3. Prepare Persistent Directories
 
 ```bash
 mkdir -p Schedules data
 ```
 
-These directories will be mounted inside the Docker container, allowing files to persist after the container exits.
-
-### 4. Run the container
+#### 4. Run the Container
 
 ```bash
 docker run --rm \
-  --mount type=bind,source="$(pwd)/Schedules",target=/app/output \
-  --mount type=bind,source="$(pwd)/data",target=/app/data \
-  mortgage-calculator:1.0
+  -v "$(pwd)/Schedules:/app/output" \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/config.json:/app/config.json:ro" \
+  mortgage-calculator:1.2
 ```
 
-The application executes inside the container and uses the mounted directories for persistent storage.
+The generated Excel file will appear in the repository's `Schedules/` directory.
 
-| Host directory | Container directory | Purpose |
+### Windows PowerShell
+
+#### 1. Clone the Repository
+
+```powershell
+git clone https://github.com/coffeeincode101/Mortgage-Calculator.git
+cd Mortgage-Calculator
+```
+
+#### 2. Build the Docker Image
+
+```powershell
+docker build -t mortgage-calculator:1.2 .
+```
+
+#### 3. Prepare Persistent Directories
+
+```powershell
+New-Item -ItemType Directory -Force -Path Schedules, data | Out-Null
+```
+
+#### 4. Run the Container
+
+```powershell
+docker run --rm `
+  -v "${PWD}/Schedules:/app/output" `
+  -v "${PWD}/data:/app/data" `
+  -v "${PWD}/config.json:/app/config.json:ro" `
+  mortgage-calculator:1.2
+```
+
+The Excel workbook will be available inside the `Schedules` folder.
+
+To open the folder in Windows File Explorer:
+
+```powershell
+explorer.exe .\Schedules
+```
+
+### Docker Volume Mapping
+
+| Host location | Container location | Purpose |
 |---|---|---|
-| `Results/` | `/app/output` | Generated Excel mortgage schedules |
-| `data/` | `/app/data` | Cached Bank of England rate history |
+| `Schedules/` | `/app/output` | Generated Excel amortisation schedules |
+| `data/` | `/app/data` | Bank of England cache |
+| `config.json` | `/app/config.json` | Mortgage input configuration |
 
-The `--rm` flag removes the container after execution, but files stored through the bind mounts remain available on the host machine.
+The configuration file is mounted as read-only (`:ro`).
 
-### 5. Container execution behaviour
+This allows Docker to read the latest mortgage inputs without modifying the file.
 
-The container launches the mortgage application using its configured Python entry point.
+The `--rm` option removes the container after execution. Files in the mounted host directories remain available.
 
-The application performs the same mortgage calculation and validation workflow as a local installation. Docker changes the execution environment rather than the underlying financial calculations.
+### Changing Mortgage Inputs
 
-**Note:** Docker uses Python 3.15 for its runtime image. Python 3.11–3.15 compatibility is tested separately through GitHub Actions.
+After the initial Docker image has been built:
 
-## Running Unit Tests
+1. Open `config.json`.
+2. Modify the mortgage details.
+3. Save the file.
+4. Run the existing `docker run` command again.
+5. Open the newly generated workbook in `Schedules/`.
 
-Run the `unittest` suite from the project root:
+**There is no need to rebuild Docker when changing only mortgage inputs in `config.json`.**
+
+Rebuilding is required when application source code or dependencies change.
+
+## Bank of England Integration
+
+The application retrieves the Bank of England's published Bank Rate series (`IUDBEDR`).
+
+The scraper includes:
+
+- A seven-day retrieval window.
+- A five-day local cache.
+- A five-second HTTP request timeout.
+- JSON storage of successful and failed retrieval attempts.
+- Historical-rate fallback when a live request fails.
+- Temporary-file writing and atomic replacement to reduce the risk of cache corruption.
+
+If the live request fails, the application attempts to reuse its most recent successful historical rate.
+
+If no live or historical rate is available, the application raises an error rather than inventing a rate.
+
+### Variable-Rate Modelling
+
+When fixed-rate deals do not cover the full mortgage term, the calculator uses the retrieved Bank Rate plus the configured tracker margin for the remaining period.
+
+The supplied configuration uses an additional **0.5 percentage points**.
+
+This is a forecasting assumption. The application does not predict future Bank Rate changes.
+
+## Financial Calculation Methodology
+
+### Monthly Interest
+
+Standard monthly interest is calculated using:
+
+```text
+Monthly interest = Outstanding balance × (Annual rate / 100 / 12)
+```
+
+Monetary calculations use `Decimal` and appropriate two-decimal-place quantisation.
+
+### Initial Broken-Period Interest
+
+The calculator accounts for interest accrued from the mortgage completion date through the end of the completion month, inclusive.
+
+For example:
+
+```text
+Completion date: 7 December 2023
+First regular payment: January 2024
+Broken-period interest: 25 days
+```
+
+Additional broken-period interest is included in the first payment while preserving the scheduled principal contribution.
+
+The daily-rate divisor is based on whether the completion year contains 365 or 366 days.
+
+### Fixed-Rate Transitions
+
+When one fixed-rate deal ends and another begins, the calculator recalculates the scheduled monthly repayment using the outstanding balance, remaining mortgage term and new interest rate.
+
+### Overpayments
+
+Recurring monthly and one-off overpayments reduce the outstanding principal.
+
+The calculation engine caps applied overpayments when necessary to prevent the outstanding mortgage balance from becoming negative.
+
+Additional payments can shorten the overall repayment period.
+
+## Automated Testing
+
+The project includes unit, regression and integration tests using Python's `unittest` framework.
+
+### Run the Test Suite
+
+From the project root:
 
 ```bash
-python -m unittest discover -s Testing -p "mortgage_testing.py" -v
+python -m unittest discover -s Testing -p 'mortgage_testing.py' -v
 ```
 
-The tests cover:
+### Test Coverage
 
-- Daily-rate divisors for leap and non-leap completion years.
-- Initial broken-period day counting and combined first-month interest.
-- Monthly interest, final payment settlement and principal overpayments.
-- Full mortgage amortisation without additional overpayments.
-- Full amortisation with recurring overpayments.
-- Pydantic strict-type checks and business-rule validation.
+The automated tests cover:
 
-When calculation conventions or constructor parameters change, update the relevant tests to verify the intended behaviour rather than merely changing expected figures to match the output.
+- Mortgage interest calculations.
+- Broken-period interest.
+- Leap-year handling.
+- Fixed-rate transitions.
+- Full mortgage amortisation.
+- Recurring overpayments.
+- Early mortgage settlement.
+- Strict Pydantic input validation.
+- Invalid mortgage terms and interest rates.
+- Duplicate and malformed overpayment records.
+- Bank of England JSON persistence.
+- Atomic file replacement and failed-write protection.
+- Network timeouts and cached-rate fallback.
+- Missing historical Bank of England rates.
+- Excel workbook generation and verification.
 
 ### End-to-End Integration Testing
 
-The automated test suite includes an integration test that verifies the complete mortgage calculation and Excel export workflow.
+The integration test exercises the complete mortgage calculation and Excel export workflow.
 
-The test:
+It:
 
-- Validates mortgage inputs using the Pydantic contract.
-- Generates a complete 24-month amortisation schedule.
-- Exports the calculated schedule to an Excel workbook.
-- Reopens the generated workbook using pandas.
-- Verifies the repayment records and final mortgage balance.
-- Confirms that the total principal repaid matches the original loan balance.
+1. Supplies valid mortgage inputs.
+2. Executes Pydantic validation.
+3. Generates a 24-month amortisation schedule.
+4. Exports the schedule into an Excel workbook.
+5. Opens the generated workbook using pandas.
+6. Verifies the repayment records and final mortgage balance.
+7. Confirms that the total principal repaid matches the original mortgage balance.
 
-Excel output is redirected to a temporary directory during testing, ensuring that existing mortgage forecasts are not modified.
+The test uses a temporary output directory, preventing changes to existing mortgage forecasts.
 
 The integration test uses explicitly supplied interest rates and does not require a live Bank of England connection.
 
-### Continuous Integration
+## Continuous Integration
 
-GitHub Actions automatically executes the regression test suite across five Python versions:
+GitHub Actions automatically runs the test suite against:
 
-| Python version | Testing environment |
+| Python version | Environment |
 |---|---|
-| 3.11 | Ubuntu GitHub runner |
-| 3.12 | Ubuntu GitHub runner |
-| 3.13 | Ubuntu GitHub runner |
-| 3.14 | Ubuntu GitHub runner |
-| 3.15 | Ubuntu GitHub runner |
+| 3.11 | Ubuntu |
+| 3.12 | Ubuntu |
+| 3.13 | Ubuntu |
+| 3.14 | Ubuntu |
+| 3.15 | Ubuntu |
 
-Each environment independently installs dependencies from `pyproject.toml`, verifies the installation and executes the unit tests.
+Each environment independently installs the project dependencies and executes the automated tests.
 
-The workflow is triggered by pushes to `main`, pull requests targeting `main`, and manual execution.
+The workflow supports pushes to `main`, pull requests targeting `main` and manual execution.
 
-## Calculation Assumptions
+## Limitations and Assumptions
 
-This application is a forecasting tool, **not a lender-issued repayment statement**. Actual mortgage statements can differ due to the lender's daily-interest convention, payment collection dates, rate-change timing, fees and contractual treatment of overpayments.
+**This application is a mortgage forecasting tool, not a lender-issued mortgage statement or financial advice.**
 
-Confirm these details against the relevant mortgage agreement.
+Actual lender calculations may differ due to:
 
-## License
+- Daily-interest conventions.
+- Payment collection dates.
+- Interest-rate changes.
+- Mortgage fees.
+- Contractual treatment of overpayments.
+- Lender-specific repayment rounding rules.
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+The Bank of England tracker model assumes a constant rate over the remaining variable-rate period. It does not predict future interest-rate decisions.
+
+Users should verify the modelling assumptions against their mortgage agreement before relying on the forecast.
+
+## Licence
+
+Distributed under the MIT License. See [LICENSE](LICENSE).

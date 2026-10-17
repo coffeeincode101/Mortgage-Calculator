@@ -1,0 +1,39 @@
+
+{
+  "purchase_price": "250000.00",
+  "deposit": "60000.00",
+  "term_years": 35,
+  "start_date": "2023-12-07",
+
+  "fixed_deals": [
+    {
+      "rate": "4.9",
+      "years": 5
+    },
+    {
+      "rate": "4.2",
+      "years": 2
+    },
+    {
+      "rate": "3.8",
+      "years": 5
+    }
+  ],
+
+  "overpayments": [
+    {
+      "date": "2024-03-01",
+      "amount": "100.00"
+    },
+    {
+      "date": "2028-12-01",
+      "amount": "200.00"
+    },
+    {
+      "date": "2030-12-01",
+      "amount": "400.00"
+    }
+  ],
+
+  "one_off_overpayments": []
+}
