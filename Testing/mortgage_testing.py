@@ -65,6 +65,83 @@ class RunMortgageSchedule(unittest.TestCase):
 
         self.assertLessEqual(len(baseline), self.term_months)
 
+
+    def test_fixed_rate_transition(self):
+            """Verify interest and repayments recalculate between fixed-rate deals."""
+
+            # Arrange: Two consecutive fixed-rate periods.
+            term_years = 2
+            first_rate = Decimal("4.5")
+            second_rate = Decimal("3.0")
+
+            fixed_deals = [
+                (first_rate, 1),
+                (second_rate, 1),
+            ]
+
+            # Act: Generate the complete repayment schedule.
+            schedule = generate_schedule(
+                purchase_price=self.purchase_price,
+                deposit=self.deposit,
+                term_years=term_years,
+                start_date=self.start_date,
+                fixed_deals=fixed_deals,
+                variable_tracker=None,
+                overpayments=[],
+                one_off_overpayments=[],
+                fixed_deal_lengths=2,
+                months_remaining=24
+            )
+
+            # Assert: The schedule contains all 24 months.
+            self.assertEqual(len(schedule), 24)
+
+            # Verify the transition occurs in the correct month.
+            self.assertEqual(schedule.iloc[11]["Date"], "Jan - 2025")
+            self.assertEqual(schedule.iloc[12]["Date"], "Feb - 2025")
+
+            # Verify month 12 uses the original 4.5% rate.
+            balance_month_11 = schedule.iloc[10]["Balance"]
+
+            expected_first_interest = (
+                balance_month_11 * first_rate / Decimal("1200")
+            ).quantize(Decimal("0.01"))
+
+            self.assertEqual(
+                schedule.iloc[11]["Interest"],
+                expected_first_interest
+            )
+
+            # Verify month 13 uses the new 3.0% rate.
+            balance_month_12 = schedule.iloc[11]["Balance"]
+
+            expected_second_interest = (
+                balance_month_12 * second_rate / Decimal("1200")
+            ).quantize(Decimal("0.01"))
+
+            self.assertEqual(
+                schedule.iloc[12]["Interest"],
+                expected_second_interest
+            )
+
+            # Verify monthly repayment decreases after the rate reduction.
+            self.assertLess(
+                schedule.iloc[12]["Total Monthly Amount"],
+                schedule.iloc[11]["Total Monthly Amount"]
+            )
+
+            # Verify the mortgage is completely repaid.
+            self.assertEqual(
+                schedule.iloc[-1]["Balance"],
+                Decimal("0.00")
+            )
+
+            # Verify all original principal has been repaid.
+            self.assertEqual(
+                sum(schedule["Principal"]),
+                self.balance
+            )
+
     def test_overpayments(self):
             
         baseline_with_overpayments = generate_schedule(
@@ -369,7 +446,7 @@ class TestMortgageContract(unittest.TestCase):
                     "Fixed-rate deal Record 2",
                     str(context.exception)
                 )
-                
+
     def test_strict_type_enforcement_blocks_string_integers(self):
         '''Verify that string representations of numbers are rejected under strict validation.'''
         broken_payload = self.valid_payload.copy()
