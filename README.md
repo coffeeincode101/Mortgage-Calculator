@@ -4,6 +4,8 @@ A Python application for generating detailed mortgage repayment forecasts. It mo
 
 Calculations use Python's `Decimal` type to avoid binary floating-point rounding errors in monetary values. The application produces a month-by-month amortisation schedule and exports it to a formatted Excel workbook.
 
+The application also supports **Docker containerisation**, allowing it to run within an isolated Python environment without requiring its dependencies to be installed directly on the host machine.
+
 ## Key Features
 
 - **First-payment broken-period interest:** Adds interest accrued from the mortgage completion date through the end of that calendar month (inclusive) to the standard interest for the first repayment month. The additional interest is added to the first payment, preserving the scheduled principal contribution.
@@ -14,26 +16,34 @@ Calculations use Python's `Decimal` type to avoid binary floating-point rounding
 - **Bank of England–linked tracker modelling:** When fixed-rate periods do not cover the full term, the application can use a retrieved Bank Rate plus the configured tracker margin (0.5 percentage points in the supplied configuration) for the remaining period. This is a modelling assumption, not a forecast of future Bank Rate changes.
 - **Flexible overpayments:** Supports changes to ongoing monthly overpayments and individual one-off payments. Early settlement caps applied overpayments to the principal still outstanding.
 - **Excel export:** Produces a formatted `.xlsx` repayment schedule with monthly payments, principal, interest, overpayments and remaining balance.
-- **Python Compatibility:** The mortgage calculator targets Python 3.11 through 3.15. A GitHub Actions continuous integration workflow runs the regression test suite against each supported Python version on pushes and pull requests to main.
+- **Python compatibility:** The mortgage calculator targets Python 3.11 through 3.15. A GitHub Actions continuous integration workflow runs the regression test suite against each supported Python version on pushes and pull requests to `main`.
+- **Docker containerisation:** Packages the application and its dependencies using a Python 3.15 slim image, providing an isolated execution environment. Supports persistent Excel exports and Bank of England rate history through Docker bind mounts.
 
 ## Project Architecture
 
 ```text
 Mortgage-Calculator/
+├── .github/
+│   └── workflows/            # Automated Python compatibility tests
 ├── src/
-│   ├── mortgage.py          # Application orchestration and entry point
-│   ├── engine.py            # Amortisation calculations and schedule generation
-│   ├── boe_scraper.py       # Bank of England rate retrieval and cache management
-│   ├── contract_checker.py  # Pydantic input validation
-│   ├── settings.py          # Application constants and configuration
-│   └── utils.py             # Shared utilities, including timing helpers
+│   ├── mortgage.py           # Application orchestration and entry point
+│   ├── engine.py             # Amortisation calculations and schedule generation
+│   ├── boe_scraper.py        # Bank of England rate retrieval and cache management
+│   ├── contract_checker.py   # Pydantic input validation
+│   ├── settings.py           # Application constants and configuration
+│   └── utils.py              # Shared utilities, including timing helpers
 ├── Testing/
-│   └── mortgage_testing.py  # Unit and regression tests
+│   └── mortgage_testing.py   # Unit and regression tests
 ├── data/
-│   └── boe_rate.json        # Cached successful and failed rate retrievals
-├── pyproject.toml
+│   └── boe_rate.json         # Cached successful and failed rate retrievals
+├── Dockerfile                # Container build configuration
+├── .dockerignore             # Excludes unnecessary files from Docker builds
+├── .gitignore
+├── pyproject.toml            # Dependency definitions and version constraints
 └── README.md
 ```
+
+The architecture separates application orchestration, input validation, financial calculations, external data retrieval and output generation.
 
 ## Bank of England Rate Integration
 
@@ -56,33 +66,33 @@ If neither live data nor a historical successful rate is available, the applicat
 
 Python 3.11–3.15 is supported and tested through GitHub Actions. Project dependencies and compatible version constraints are managed centrally in [pyproject.toml](pyproject.toml).
 
-**1. Clone the repository**
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/coffeeincode101/Mortgage-Calculator.git
 cd Mortgage-Calculator
 ```
 
-**2. Create and activate a virtual environment (macOS/Linux)**
+### 2. Create and activate a virtual environment (macOS/Linux)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-**3. Install dependencies**
+### 3. Install dependencies
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install --group runtime
 ```
 
-**4. Environment configuration**
+### 4. Environment configuration
 
-Configure local environment settings as needed. For example, if your application is configured to read these variables, create a `.env` file in the project root:
+Configure local environment settings as needed. For example, if supported by your application configuration, create a `.env` file in the project root:
 
 ```dotenv
-OUTPUT_PATH=/path/to/your/output/directory
+MORTGAGE_OUTPUT=/path/to/your/output/directory
 LOG_LEVEL=INFO
 ```
 
@@ -135,6 +145,82 @@ For a completion date of 7 December 2023, the first scheduled payment is 1 Janua
 
 The application then generates a monthly schedule and exports it as a formatted Excel workbook to the configured output location.
 
+## Docker Deployment
+
+The mortgage calculator can run inside a Docker container, providing a consistent Python environment independently of the host machine's installed packages.
+
+The Docker configuration uses:
+
+- **Python 3.15 slim:** A smaller Python base image containing the runtime needed to execute the application.
+- **Centralised dependency management:** Installs dependencies directly from `pyproject.toml`.
+- **Isolated execution:** Runs the application inside the container rather than the host Python environment.
+- **Non-root execution:** Uses a dedicated application user to limit unnecessary container privileges.
+- **Persistent file storage:** Uses bind mounts to retain generated Excel files and cached Bank of England rates outside the container.
+- **Docker build exclusions:** Uses `.dockerignore` to prevent unnecessary project files, virtual environments and local configuration from entering the image.
+
+### 1. Install Docker
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and ensure the Docker Engine is running.
+
+Verify the installation:
+
+```bash
+docker --version
+docker info
+```
+
+### 2. Build the Docker image
+
+From the project's root directory, execute:
+
+```bash
+docker build -t mortgage-calculator:1.0 .
+```
+
+Docker will download the Python base image if necessary, install the application dependencies and package the source code into a container image.
+
+Verify the image:
+
+```bash
+docker images
+```
+
+### 3. Prepare persistent storage
+
+Create local directories for Excel exports and Bank of England rate history:
+
+```bash
+mkdir -p Results data
+```
+
+These directories will be mounted inside the Docker container, allowing files to persist after the container exits.
+
+### 4. Run the container
+
+```bash
+docker run --rm \
+  --mount type=bind,source="$(pwd)/Results",target=/app/output \
+  --mount type=bind,source="$(pwd)/data",target=/app/data \
+  mortgage-calculator:1.0
+```
+
+The application executes inside the container and uses the mounted directories for persistent storage.
+
+| Host directory | Container directory | Purpose |
+|---|---|---|
+| `Results/` | `/app/output` | Generated Excel mortgage schedules |
+| `data/` | `/app/data` | Cached Bank of England rate history |
+
+The `--rm` flag removes the container after execution, but files stored through the bind mounts remain available on the host machine.
+
+### 5. Container execution behaviour
+
+The container launches the mortgage application using its configured Python entry point.
+
+The application performs the same mortgage calculation and validation workflow as a local installation. Docker changes the execution environment rather than the underlying financial calculations.
+
+**Note:** Docker uses Python 3.15 for its runtime image. Python 3.11–3.15 compatibility is tested separately through GitHub Actions.
+
 ## Running Unit Tests
 
 Run the `unittest` suite from the project root:
@@ -148,9 +234,27 @@ The tests cover:
 - Daily-rate divisors for leap and non-leap completion years.
 - Initial broken-period day counting and combined first-month interest.
 - Monthly interest, final payment settlement and principal overpayments.
+- Full mortgage amortisation without additional overpayments.
+- Full amortisation with recurring overpayments.
 - Pydantic strict-type checks and business-rule validation.
 
 When calculation conventions or constructor parameters change, update the relevant tests to verify the intended behaviour rather than merely changing expected figures to match the output.
+
+### Continuous Integration
+
+GitHub Actions automatically executes the regression test suite across five Python versions:
+
+| Python version | Testing environment |
+|---|---|
+| 3.11 | Ubuntu GitHub runner |
+| 3.12 | Ubuntu GitHub runner |
+| 3.13 | Ubuntu GitHub runner |
+| 3.14 | Ubuntu GitHub runner |
+| 3.15 | Ubuntu GitHub runner |
+
+Each environment independently installs dependencies from `pyproject.toml`, verifies the installation and executes the unit tests.
+
+The workflow is triggered by pushes to `main`, pull requests targeting `main`, and manual execution.
 
 ## Calculation Assumptions
 
