@@ -33,6 +33,26 @@ class MortgageDataChecker(BaseModel):
             
         return v
 
+    @field_validator('overpayments' , mode='after')
+    @classmethod
+    def enforce_unique_recurring_overpayments(cls, payments):
+        """ Reject duplicate overpayments"""
+
+        existing_months = {}
+
+        for index, (payment_date, amount) in enumerate(payments, start=1):
+            lookup_month = (payment_date.year, payment_date.month)
+
+            if lookup_month in existing_months:
+                original_index = existing_months[lookup_month]
+                raise ValueError(
+                    f"Duplicate recurring overpayment for "
+                    f"{payment_date.strftime('%B %Y')}. "
+                    f"Record {index} conflicts with Record {original_index}."
+                )
+            existing_months[lookup_month] = index
+
+
     @model_validator(mode='after')
     def enforce_contracts(self) -> 'MortgageDataChecker':
         if self.deposit >= self.purchase_price:
