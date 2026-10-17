@@ -54,6 +54,7 @@ cover/
 *.xlsx
 __pycache__/
 .pytest_cache/
+Schedules/
 
 # Translations
 *.mo
