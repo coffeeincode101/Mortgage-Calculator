@@ -70,7 +70,7 @@ def validate_inputs(
     variable_tracker: Decimal,
     overpayments: List[Tuple[datetime, Decimal]],
     one_off_overpayments: List[Tuple[datetime, Decimal]]) -> Optional[pd.DataFrame]:
-    '''Validated user inputs against business logic, to ensure a clean output'''
+    """Validated user inputs against business logic, to ensure a clean output"""
 
     try:
         # Enforce contract rules strictly using the arguments passed into this function
@@ -111,7 +111,7 @@ def validate_inputs(
     )
 
 def save_to_excel(df: pd.DataFrame) -> None:
-    '''Function saves output to Excel file in currency format and allows '''
+    """Function saves output to Excel file in currency format and allows """
     
     output_dir = get_output_path()
     timestamp = datetime.now().strftime('%Y-%m-%d %H-%M-%S')

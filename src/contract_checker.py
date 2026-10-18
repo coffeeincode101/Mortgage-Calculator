@@ -26,7 +26,7 @@ class MortgageDataChecker(BaseModel):
     @field_validator('fixed_deals', mode='after')
     @classmethod
     def validate_fixed_deals(cls, deals):
-        '''Reject negative rates and non-positive deal durations.'''
+        """Reject negative rates and non-positive deal durations."""
 
         for index, (rate, duration) in enumerate(deals, start=1):
 

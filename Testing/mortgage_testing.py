@@ -433,7 +433,7 @@ class TestMortgageContract(unittest.TestCase):
         }
 
     def test_invalid_fixed_interest_rates(self):
-        '''Reject zero and negative fixed interest rates.'''
+        """Reject zero and negative fixed interest rates."""
 
         for invalid_rate in [Decimal('0'), Decimal('-0.5')]:
             with self.subTest(rate=invalid_rate):
@@ -448,7 +448,7 @@ class TestMortgageContract(unittest.TestCase):
                     MortgageDataChecker(**broken_payload)
 
     def test_zero_variable_tracker_rejected(self):
-        '''Reject a zero variable interest rate.'''
+        """Reject a zero variable interest rate."""
 
         broken_payload = self.valid_payload.copy()
         broken_payload['variable_tracker'] = Decimal('0')
